@@ -1,0 +1,39 @@
+package authenticator
+
+import (
+	"net/http"
+	"GoServer/models"
+	"context"
+	"github.com/golang-jwt/jwt/v5"
+)
+
+
+var jwtKey = []byte("om namo bhagwate vaudevay") 
+
+
+func RequireAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		
+			tokenString := r.Header.Get("Authorization")
+
+			if tokenString == "" {
+				http.Error(w, "missing Authentication Token", http.StatusUnauthorized)
+				return
+			}
+
+			claims := &models.Claims{}
+			token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+				return jwtKey, nil
+			})
+
+			if err != nil || !token.Valid {
+				http.Error(w, "invalid token", http.StatusUnauthorized)
+				return
+			}
+
+
+			allowed := context.WithValue(r.Context(), "userID", claims.UserID)
+			// Continue if valid
+			next.ServeHTTP(w, r.WithContext(allowed))
+		}
+}

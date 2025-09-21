@@ -1,0 +1,51 @@
+package tools
+
+import (
+	"log"
+	"os"
+	"os/exec"
+	"path/filepath"
+)
+
+func EncodeVideoToDASH(videoUID string) {
+
+	input := "./MediaData/videos/rawVideos/" + videoUID + ".mp4" // change to your file path
+	outputDir := "./MediaData/videos/dashEncodedVideos/" + videoUID
+	log.Println("Input video:", input)
+
+	// Create output folder if it doesn't exist
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		log.Fatal("Error creating output folder:", err)
+	}
+
+	// Output MPD manifest path
+	outputMPD := filepath.Join(outputDir, "manifest.mpd")
+
+	// FFmpeg command: compress + DASH in one step
+	cmd := exec.Command("./ServerDataReceive/tools/ffmpeg",
+		"-i", input,               // input file
+		"-c:v", "libx264",         // H.264 video codec
+		"-preset", "fast",         // encoding speed/efficiency tradeoff
+		"-crf", "23",              // quality (lower = better quality)
+		"-c:a", "aac",             // audio codec
+		"-b:a", "128k",            // audio bitrate
+		"-bf", "1",                // B-frames (important for DASH)
+		"-keyint_min", "60",       // min keyframe interval
+		"-g", "60",                // GOP size
+		"-sc_threshold", "0",      // scene change threshold
+		"-f", "dash",              // output format
+		outputMPD,                 // manifest output
+	)
+
+	// Optional: stream ffmpeg output to terminal
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	// Run the command
+	log.Println("Processing video to DASH...")
+	if err := cmd.Run(); err != nil {
+		log.Fatal("FFmpeg failed:", err)
+	}
+
+	log.Println("DASH files created in:", outputDir)
+}
