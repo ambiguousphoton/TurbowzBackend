@@ -14,7 +14,7 @@ func FirstFrameThumbnail(video_url string) error {
 		"-ss", "0",
 		"-i", input,
 		"-frames:v", "1",
-		"-vf", "scale=w=1280:h=720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2",
+		// "-vf", "scale=w=1280:h=720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2",   //   ----> forcing  aspect ratio
 		"-q:v", "2", // quality (lower is better)
 		output,
 	)

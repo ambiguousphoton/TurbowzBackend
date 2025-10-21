@@ -20,6 +20,8 @@ optional ->  fromlocation, userdescription, gender, dob
 
 
 
+
+
 updating user profile 
 
 curl -X POST http://localhost:8100/update-profile \
@@ -38,8 +40,7 @@ curl -X POST http://localhost:8100/update-profile \
 
 
 
-
-  User Authentication
+User Authentication
 
 curl -X POST http://localhost:8100/authenticate \
 -H "Content-Type: application/x-www-form-urlencoded" \
@@ -116,10 +117,13 @@ curl -X POST "http://localhost:8001/add-connection" -d "contactID=4" -H "Authori
 
 
 
-Search for Videos
+Search for Videos with Keyword
 curl -X GET "http://localhost:8082/search?keyword=om" \
   -H "Accept: application/json"
 
+Search for Videos with userId
+curl -X GET "http://localhost:8082/search-video-with?userID=27" \
+  -H "Accept: application/json"
 
 
 
@@ -147,7 +151,86 @@ Getting Video Meta Data
 curl -X GET "http://localhost:7999/vmd?video_id=14"
 
 
+Updating Views for Video
+curl -X Post "http://localhost:7999/view"
+-d "video_id=14"
 
 Get Video 
 
 curl -X GET "http://localhost:8091/get-video-stream/{VideoId}"
+
+
+
+Get User Info With userID
+
+
+curl -s "http://localhost:8100/get-user?userID=27"
+
+
+
+Search Users With keyword
+
+
+curl -s "http://localhost:8100/search-users?keyword=Best Friend of Krishna"          ! wil not work in terminal
+/// curl -s "http://localhost:8100/search-users?keyword=Best%20Friend%20of%20Krishna"
+
+
+
+
+Inference / Vectorise text data / Embedding 
+
+curl -X POST "http://0.0.0.0:9000/vectorize/" \
+-H "Content-Type: application/json" \
+-d '{
+  "title": "Sample Video",
+  "description": "This is a test video description",
+  "tags": ["test", "video", "fastapi"],
+  "user_name": "vyoam"
+}'
+
+AudioToText
+
+curl -X POST "http://127.0.0.1:9018/audio-to-text/" -F "file=@audio.mp3"
+
+
+---------------------------------------------------------------------------------------------------
+
+Websocket 
+
+
+Connection Request
+    
+      {
+        "Type": "Connection-Request",
+        "ReceiverID": "95"
+      }
+      Header: 
+        Autherisation: ""
+
+
+
+-------
+
+Connection Approval 
+
+    {
+        "Type": "Connection-Approval",
+        "ReceiverID" : "27",
+        "Status": "Accepted"
+    }
+        Header: 
+          Autherisation: ""
+
+--------
+
+Message
+
+
+    {
+      "Type": "Message",
+      "RoomID": "9ff1ea97-a619-47cb-bdc1-5b812ca654fc",
+      "Text": "om om !"
+    }
+        Header: 
+          Autherisation: ""
+

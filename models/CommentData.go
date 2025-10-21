@@ -7,6 +7,7 @@ type CommentData struct {
 	Comment_text string
 	Comment_date string
 	Commenter_Handle string
+	Commenter_Name string
 }
 
 

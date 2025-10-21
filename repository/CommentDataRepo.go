@@ -48,7 +48,8 @@ func (r *PostgresCommentRepo) GetVideoComments(video_id int64) ([]models.Comment
 			c.commenter_id,
 			c.comment_text,
 			c.created_at,
-			u.user_handle
+			u.user_handle,
+			u.user_profile_name
 		FROM comments_table c
 		JOIN user_data_table u ON c.commenter_id = u.user_id
 		WHERE c.parent_video_id = $1
@@ -63,7 +64,7 @@ func (r *PostgresCommentRepo) GetVideoComments(video_id int64) ([]models.Comment
 	var comments []models.CommentData
 	for rows.Next() {
 		var comment models.CommentData
-		err := rows.Scan(&comment.Commenter_id, &comment.Comment_text, &comment.Comment_date, &comment.Commenter_Handle)
+		err := rows.Scan(&comment.Commenter_id, &comment.Comment_text, &comment.Comment_date, &comment.Commenter_Handle, &comment.Commenter_Name)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning comment: %v", err)
 		}

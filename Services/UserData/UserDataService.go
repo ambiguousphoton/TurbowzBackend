@@ -13,11 +13,12 @@ import (
 	_ "github.com/lib/pq" // postgres driver
 	"golang.org/x/crypto/bcrypt" // encrytion
 	"encoding/json"
+	"strconv"
 )
 
 
 var jwtKey = []byte("om namo bhagwate vaudevay")  /// SUPER SECRET KEEP SOME WHERE SAFE
-
+var tokenValidityDuration = time.Minute * 50000
 
 
 
@@ -187,7 +188,7 @@ func UserAuthentication(w http.ResponseWriter, r *http.Request, UserRepo reposit
 	}
 
 		// Create JWT
-	expirationTime := time.Now().Add(15 * time.Minute)
+	expirationTime := time.Now().Add(tokenValidityDuration)
 	claims := &models.Claims{
 		UserID:     userId,
 		UserHandle: UserHandle,
@@ -207,11 +208,71 @@ func UserAuthentication(w http.ResponseWriter, r *http.Request, UserRepo reposit
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
     "token": tokenString,
+	"userID": fmt.Sprintf("%d", userId),
 	})
 	log.Println("User Authenticated with id", userId)
 	return nil
 }
 
+
+func GetUser(w http.ResponseWriter, r *http.Request, UserRepo repository.UserRepo) error{
+	if r.Method != http.MethodGet{
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		log.Printf("GetUser: Method not allowed - received %s, expected GET", r.Method)
+		return nil
+	}
+
+	userIDstr := r.URL.Query().Get("userID")
+	if userIDstr == ""{
+		http.Error(w, "userID is required", http.StatusBadRequest)
+		log.Println("GetUser: userID query parameter is missing")
+		return fmt.Errorf("userID is required")
+	}
+
+	userID, err := strconv.ParseInt(userIDstr, 10, 64)
+	if err != nil{
+		http.Error(w, "Invalid userID format", http.StatusBadRequest)
+		log.Printf("GetUser: Invalid userID format for input %s - %v", userIDstr, err)
+		return fmt.Errorf("invalid userID format")
+	}
+	
+	userData, err := UserRepo.GetUser(userID)
+	if err != nil{
+		log.Printf("GetUser: Failed to retrieve user data for userID %s - %v", userIDstr, err)
+		http.Error(w, "Error while fetching user data: "+err.Error(), http.StatusInternalServerError)
+		return err
+	}
+	json.NewEncoder(w).Encode(userData)
+	log.Println("Search Results for userID Sent :", userID)
+	return nil
+}
+
+
+func SearchUsers(w http.ResponseWriter, r *http.Request, UserRepo repository.UserRepo) error{
+	log.Println("SearchUsers: SearchUsers endpoint hit")
+	if r.Method != http.MethodGet{
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		log.Printf("SearchUsers: Method not allowed - received %s, expected GET", r.Method)
+		return nil
+	}
+	keyword := r.URL.Query().Get("keyword")
+	if keyword == ""{
+		http.Error(w, "keyword is required", http.StatusBadRequest)
+		log.Println("keyword: parameter is missing")
+		return fmt.Errorf("keyword is required")
+	}
+	log.Println("SearchUsers: Searching users with keyword:", keyword)
+	
+	userIDList, err := UserRepo.SearchWithKeyword(keyword)
+	if err != nil{
+		log.Printf("SearchUsers: Failed to retrieve user list for keyword %s - %v", keyword, err)
+		http.Error(w, "Error while fetching user list : "+err.Error(), http.StatusInternalServerError)
+		return err
+	}
+	json.NewEncoder(w).Encode(userIDList)
+	log.Println("Search Results for keyword Sent")
+	return nil
+}
 
 
 
@@ -230,6 +291,8 @@ func withCORS(next http.Handler) http.Handler {
         next.ServeHTTP(w, r)
     })
 }
+
+
 
 
 
@@ -275,10 +338,25 @@ func main() {
 		}
 	})
 
+	mux.HandleFunc("/get-user", func(w http.ResponseWriter, r *http.Request){
+		err := GetUser(w, r, UserRepo)
+		if err != nil{
+			log.Printf("Handler /get-user: %v", err)
+			http.Error(w, "Failed to get User" , http.StatusInternalServerError)
+			return
+		}
+	})
 
-
+	mux.HandleFunc("/search-users", func(w http.ResponseWriter, r *http.Request){
+		err := SearchUsers(w, r, UserRepo)
+		if err != nil{
+			log.Printf("Handler /search-users: %v", err)
+			http.Error(w, "Failed to search for Users" , http.StatusInternalServerError)
+			return
+		}
+	})
 	
-	log.Println("Server Started at Port 8100")
+	log.Println("UserDataService Started at Port 8100")
 	err := http.ListenAndServe(":8100", withCORS(mux))
 	if err != nil{
 		log.Printf("Critical Error: Failed to start server on port 8100 - %v", err)

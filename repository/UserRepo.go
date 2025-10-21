@@ -10,6 +10,7 @@ import (
 
 type UserRepo interface {
     CreateNewUser(user *models.UserData, auth *models.UserAuth) error
+	GetUser(userID int64) (*models.UserData, error)
 	UpadateUserProfile(user *models.UserData) error
     AddUserAuth(auth *models.UserAuth) error
 	CheckUser(userHandle string) (int64, string, error)
@@ -18,6 +19,7 @@ type UserRepo interface {
 	GetAllFollowers(FolloweeID int64) ([]int64,error)
 	GetAllFollowees(followerID int64) ([]int64 ,error)
 	AddConnection(requesterID int64, respondentID int64) (error)
+	SearchWithKeyword(keyword string) ([]int64, error)
 }
 
 
@@ -223,6 +225,37 @@ func (r *PostgresUserRepo)UnfollowUser(FollowerID int64, FolloweeID int64) (erro
 }
 
 
+func (r *PostgresUserRepo)GetUser(UserID int64) (*models.UserData, error) {
+	query := `
+		SELECT 
+			user_handle, 
+			user_description,
+			user_profile_name, 
+			from_location,
+			gender
+
+		FROM user_data_table
+		WHERE user_id = $1
+	`
+
+	row := r.db.QueryRow(query, UserID)
+
+	var user models.UserData
+	err := row.Scan(
+		&user.UserHandle,
+		&user.UserDescription,
+		&user.UserProfileName,
+		&user.FromLocation,
+		&user.Gender,
+	)
+	user.UserID = UserID
+	if err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}
+
 func (r *PostgresUserRepo)GetAllFollowers(followeeID int64) ([]int64 ,error) {
 	query := `
         SELECT follower_id
@@ -279,7 +312,42 @@ func (r *PostgresUserRepo)GetAllFollowees(followerID int64) ([]int64 ,error) {
     return followees, nil
 }
 
+func (r *PostgresUserRepo)SearchWithKeyword(keyword string) ([]int64, error) {
+	query := `  SELECT user_id
+				FROM user_data_table
+				WHERE 
+				user_handle ILIKE '%' || $1 || '%' OR
+				user_description ILIKE '%' || $1 || '%' OR
+				from_location ILIKE '%' || $1 || '%' OR
+				user_profile_name ILIKE '%' || $1 || '%'
+				ORDER BY 
+				CASE
+					WHEN user_handle ILIKE '%' || $1 || '%' THEN 1
+					WHEN user_profile_name ILIKE '%' || $1 || '%' THEN 2
+					ELSE 3
+				END ASC;
+		`
+	rows, err := r.db.Query(query, keyword)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 
+	var userIDList []int64
+	for rows.Next() {
+		var userID int64
+		if err := rows.Scan(&userID); err != nil {
+			return nil, err
+		}
+		userIDList = append(userIDList, userID)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return userIDList, nil
+}
 
 func (r *PostgresUserRepo)AddConnection(user1ID int64, user2ID int64) (error){
 

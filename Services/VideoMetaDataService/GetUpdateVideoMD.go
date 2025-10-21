@@ -42,6 +42,50 @@ func getVideoMD(w http.ResponseWriter, r *http.Request, vmdRepo repository.VMDre
 }
 
 
+
+func videoViewUpdate(w http.ResponseWriter, r *http.Request, vmdRepo repository.VMDrepo) {
+    log.Println("videoViewUpdate called") 
+
+    w.Header().Set("Access-Control-Allow-Origin", "http://localhost:8081")
+    w.Header().Set("Access-Control-Allow-Methods", "POST")
+    w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+    if r.Method != http.MethodPost {
+        log.Printf("Wrong Method: %s\n", r.Method)
+        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+        return
+    }
+
+    if err := r.ParseForm(); err != nil {
+        log.Printf("Failed to parse form: %v\n", err)
+        http.Error(w, "failed to parse form", http.StatusBadRequest)
+        return
+    }
+
+    videoIDStr := r.FormValue("video_id")
+    log.Printf("Received video_id: %s\n", videoIDStr)
+
+    videoID, err := strconv.ParseInt(videoIDStr, 10, 64)
+    if err != nil {
+        log.Printf("Invalid video_id: %s, error: %v\n", videoIDStr, err)
+        http.Error(w, "invalid video_id", http.StatusBadRequest)
+        return
+    }
+
+    err = vmdRepo.VideoViewUpdate(videoID)
+    if err != nil {
+        log.Printf("Error updating views for video_id %d: %v\n", videoID, err)
+        http.Error(w, "failed to update views", http.StatusInternalServerError)
+        return
+    }
+
+    log.Printf("Views updated successfully for video_id %d\n", videoID)
+    w.WriteHeader(http.StatusOK)
+    w.Write([]byte("views updated"))
+}
+
+
+
 func main() {
 	
 	dbDestination := "host=localhost port=5454 user=postgres password=Narayan!123 dbname=MetaDataStorage sslmode=disable"
@@ -56,6 +100,11 @@ func main() {
 			http.Error(w, "Failed to get Video Meta Data", http.StatusInternalServerError)
 			return
 		}
+	})
+
+
+	http.HandleFunc("/view", func(w http.ResponseWriter, r *http.Request) {
+    	videoViewUpdate(w, r, VMDrepo)	
 	})
 
 	log.Println("VMD GETER Server Started at Port 7999")
