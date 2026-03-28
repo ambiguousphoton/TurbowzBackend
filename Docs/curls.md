@@ -12,8 +12,7 @@ curl -X POST http://localhost:8100/create-new-account \
   -d "userDateOfBirth=1992-07-21" \
   -d "gender=Male" \
   -d "email=krishna@example.com" \
-  -d "phoneNumber=888888888" \     
-  -d "password=flutePower2024"
+  -d "phoneNumber=888888888" -d "password=flutePower2024"
 
 phoneNumber, email, user_handle -> must be unique
 optional ->  fromlocation, userdescription, gender, dob
@@ -50,15 +49,15 @@ curl -X POST http://localhost:8100/authenticate \
   this returns a jwt token
 
 
-
-
-Uploading a Video
+Uploading video
 
 curl -X POST http://localhost:8080/upload \
--F "video=@HBchoubay.mp4" \
--F "title=hosteler bday" \
--F "info=om namah shivay" \
--H "Authorization: < auth token >" \
+  -F "video=@HBchoubay.mp4" \
+  -F "title=hosteler bday" \
+  -F "info=om namah shivay" \
+  -F "user_name=radha" \
+  -F 'tags=["fun","college","hostel"]' \
+  -H "Authorization: <auth token>"
 
 
 Push Comment on a Video
@@ -71,7 +70,7 @@ curl -X POST http://localhost:7200/push-comment \
 
 Get Comment on a Video
 
-curl -X GET "http://localhost:7200/get-comment?videoID=14"
+curl -X GET "http://localhost:7200/get-comment?videoID=46&limit=10&offset=20"
 
 
 
@@ -96,7 +95,7 @@ curl -X POST http://localhost:8010/unfollow \
 
 Get followers list
 
-curl -X GET "http://localhost:8010/get-followers?checkID=1" -H "Authorization: <Auth token>"
+curl -X GET "http://localhost:8010/get-followers?checkID=1" 
 
 
 
@@ -105,7 +104,7 @@ curl -X GET "http://localhost:8010/get-followers?checkID=1" -H "Authorization: <
 
 Get a User's Following list
 
-curl -X GET "http://localhost:8010/get-followees?checkID=27" -H "Authorization: <Auth token>"
+curl -X GET "http://localhost:8010/get-followees?checkID=27" 
 
 
 
@@ -118,7 +117,7 @@ curl -X POST "http://localhost:8001/add-connection" -d "contactID=4" -H "Authori
 
 
 Search for Videos with Keyword
-curl -X GET "http://localhost:8082/search?keyword=om" \
+ curl -X GET "http://localhost:8082/search?keyword=om&limit=10&offset=0"
   -H "Accept: application/json"
 
 Search for Videos with userId
@@ -153,7 +152,8 @@ curl -X GET "http://localhost:7999/vmd?video_id=14"
 
 Updating Views for Video
 curl -X Post "http://localhost:7999/view"
--d "video_id=14"
+-d "video_id=25"
+-d "user_id=3"
 
 Get Video 
 
@@ -179,58 +179,258 @@ curl -s "http://localhost:8100/search-users?keyword=Best Friend of Krishna"     
 
 Inference / Vectorise text data / Embedding 
 
-curl -X POST "http://0.0.0.0:9000/vectorize/" \
+curl -X POST "http://0.0.0.0:9000/vectorize-video/" \
 -H "Content-Type: application/json" \
--d '{
-  "title": "Sample Video",
-  "description": "This is a test video description",
-  "tags": ["test", "video", "fastapi"],
-  "user_name": "vyoam"
-}'
+-d '{"title": "Sample Video", "description": "This is a test video description", "tags": ["test", "video", "fastapi"], "user_name": "vyoam", "video_id": 32}'
+
+
+
+curl -X POST "http://localhost:8000/vectorize-user/" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_handle": "Radhe",
+    "user_profile_name": "shyama ji",
+    "user_description": "Braj ki pyari",
+    "from_location": "Braj, UP",
+    "user_date_of_birth": "1980-06-12",
+    "gender": "female",
+    "tags": ["developer", "AI", "tech"],
+    "user_id": 1
+  }'
+
+
+
+
 
 AudioToText
 
 curl -X POST "http://127.0.0.1:9018/audio-to-text/" -F "file=@audio.mp3"
 
+Get Related Videos 
 
----------------------------------------------------------------------------------------------------
+curl -X GET "http://localhost:8007/recommend?video_id=44&page=1&limit=5"
+
+
+
+Luv a video
+
+curl -X POST "http://localhost:7999/luv" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -H "Authorization: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyNywidXNlcl9oYW5kbGUiOiJBZGl0eWEiLCJleHAiOjE3NjUwNzA4ODV9.crWia0pV93P8F_hX3mveWaZW8OuyLQg-r5Ae0T2FXWk" \
+  -d "video_id=36"
+  
+Response: : luv updated, current luvved status: false%  
+
+
+
+Eco Post
+
+curl -X POST http://localhost:8080/eco-upload \
+  -H "Authorization: Auth" \
+  -F "eco_text=Hariom" \                         
+  -F "uploader_name=Aditya" \
+  -F 'tags=["eco","nature","green"]' \
+  -F "images=@dope.jpg"
+  -F "images=@dope.jpg"
+
+Search for Ecos with userId
+curl -X GET "http://localhost:8082/search-eco-by-user?userID=27" \
+  -H "Accept: application/json"
+
+Get Eco Images
+curl -X GET "http://localhost:8088/e?img=<eco url>&index=0" --output image.jpg
+
+
+Get Profile Photo
+curl -X GET "http://localhost:8088/pfp?user_id=27" --output image.jpg
+
+
+Get User Watch History
+curl -X GET "http://localhost:7992/get-user-watch-history?page=1&limit=10" \
+  -H "Authorization: <auth token>"
+
+
+Get Recommendations to User based on his Intrest
+curl -X GET "http://localhost:8007/recommend-videos-for-user?user_id=27&page=1&limit=5
+
+
+Luv a eco
+
+curl -X POST "http://localhost:7011/luv" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -H "Authorization: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo5OSwidXNlcl9oYW5kbGUiOiJoZXJvIiwiZXhwIjoxNzY1NjgzNDQ5fQ.Fkrj1LoFubq__0mqNNvcVTKo8YSfDZFH_KGMqLFN_yg" \
+  -d "eco_id=1"
+
+
+Check Eco Luv Status
+
+curl -X POST "http://localhost:7011/check-eco-luv-status" -d "eco_id=1" -d "user_ID=27"
+
+Get Eco Meta Data
+
+curl -X GET "http://localhost:7011/emd?eco_id=1"
+
+
+Update Pfp
+
+curl -X POST http://localhost:8080/pfp-upload \
+  -H "Authorization: Auth" \
+  -F "images=@dope.jpg"
+
+
+
+
+Getting Following info 
+
+curl -X GET "http://localhost:8010/get-following-info?userID=27&requesterID=27"
+
+
+  response : {"FollowerCount":0,"FolloweeCount":5,"AlreadyFollowed":false}
+
+
+
+User Video Save
+
+curl -X POST "http://localhost:8100/save-video?videoID=12345" \
+  -H "Authorization: <your_jwt_token>"
+
+
+User Eco Save
+
+curl -X POST "http://localhost:8100/save-eco?ecoID=98765" \
+  -H "Authorization: <your_jwt_token>"
+
+
+Saved Status of Eco
+
+curl -X POST "http://localhost:8100/eco-saved-status?ecoID=1" -H "Authorization: Token"
+{"saved":false}
+
+Saved Status of Video
+
+curl -X POST "http://localhost:8100/video-saved-status?videoID=1" -H "Authorization: Token"
+{"saved":false}
 
 Websocket 
 
+ws://localhost:8280/connect-with-socket-server
+Authorization : token
+{
+  "destinationID": "27",
+  "messageText": "Hello there!",
+  "links": ""
+}
 
-Connection Request
-    
-      {
-        "Type": "Connection-Request",
-        "ReceiverID": "95"
-      }
-      Header: 
-        Autherisation: ""
-
-
-
--------
-
-Connection Approval 
-
-    {
-        "Type": "Connection-Approval",
-        "ReceiverID" : "27",
-        "Status": "Accepted"
-    }
-        Header: 
-          Autherisation: ""
-
---------
-
-Message
+Other person gets
+{"destinationID":"27","links":"","messageText":"Hello there!","roomID":"947778e2-bbe8-41f6-b23f-8000da51f5ac","sourceID":"99"}
 
 
-    {
-      "Type": "Message",
-      "RoomID": "9ff1ea97-a619-47cb-bdc1-5b812ca654fc",
-      "Text": "om om !"
-    }
-        Header: 
-          Autherisation: ""
+Get Saved Videos
 
+
+curl -X GET "http://localhost:7999/get-saved-videos?limit=10&offset=0" \
+  -H "Authorization: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyNywidXNlcl9oYW5kbGUiOiJBZGl0eWEiLCJleHAiOjE3NjY3MzUxMDJ9.QZizg4NS0lNi7cJRvQtTVk9I4G8ERmi09mNJVxa_De0"
+
+
+
+Get Trending Videos
+
+curl -X GET "http://localhost:7999/get-trending-videos?limit=10&offset=0&userID=27" \
+
+
+
+Get Trending Ecos
+
+curl -X GET "http://localhost:7011/get-trending-ecos?limit=10&offset=0" 
+
+
+Get Turbomax Subscription Status
+curl -X GET "http://localhost:8100/get-turbomax-status?userID=27"
+{"turbomax_active":true}
+
+
+Delete History
+
+curl -X GET "http://localhost:7992/delete-my-history?userID=27" \
+
+"History Deleted"
+
+
+Analytics of User Uploads
+
+curl -X GET "http://localhost:7992/get-activity-data?userID=27" 
+
+{"EcoUploads":{"2025-12-13T00:00:00Z":8},"VideoUploads":{"2025-12-05T00:00:00Z":2,"2025-12-07T00:00:00Z":2,"2025-12-10T00:00:00Z":1}}
+
+
+Voting on Video by User
+
+curl -X POST "http://localhost:7992/post-video-vote" \
+-H "Content-Type: application/json" \
+-d '{
+  "video_id": 48,
+  "user_id": 27,
+  "quality": 4,
+  "ai_usage": 2
+}'
+
+
+
+Voting on Eco by User
+
+curl -X POST "http://localhost:7992/post-echo-vote" \
+-H "Content-Type: application/json" \
+-d '{
+  "eco_id": 5,
+  "user_id": 27,
+  "quality": 4,
+  "ai_usage": 2
+}'
+
+
+
+Create Event
+
+curl -X POST "http://localhost:8080/event-upload" \
+  -H "Authorization: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyNywidXNlcl9oYW5kbGUiOiJBZGl0eWEiLCJleHAiOjE3NzE3MjA5NDF9.7w0mAo7nD31KdbVWAr0mfk61fK4F1RV6RSogz3CLq3M" \
+  -F "event_title=Tech Marathon" \
+  -F "event_description=Annual Tech Conference 2024" \
+  -F "event_start_time=2024-12-01T09:00:00Z" \
+  -F "event_end_time=2024-12-01T18:00:00Z" \
+  -F 'tags=["tech","anime"]' \
+  -F "images=@image.jpg"
+
+
+Get Event Meta Data
+
+curl -X GET "http://localhost:7002/event-md?event_id=1"
+<!-- {"Event_Id":1,"Event_Url":"50a28451-b12d-4b85-b784-e0a4497ccc13","Event_Title":"Untitled Event","Uploader_ID":27,"Uploader_Handle":"Aditya","Uploader_Name":"Surya","Event_Description":"Annual Tech Conference 2024","View_Count":0,"Luv_Count":0,"Comment_Count":0,"Tags":["tech","anime"],"Already_Luved":false,"Images_Count":0,"Saves_Count":0,"Created_At":"2026-01-23T09:34:09.476141+05:30","Event_Start_Time":"2024-12-01T14:30:00+05:30","Event_End_Time":"2024-12-01T23:30:00+05:30"} -->
+
+
+
+Get Specific Event Data
+
+curl -X GET "http://localhost:7002/event-md?event_id=1"
+
+
+
+
+Increment Event Views Count
+
+curl -X GET "http://localhost:7002/increment-event-viewcount?event_id=1"
+
+
+
+Get Video Score
+
+curl -X GET "http://localhost:7999/get-videos-score?video_id=14"
+
+    response : {"Video_Quality":{"Float64":3,"Valid":true},"Video_AI_Usage":{"Float64":4,"Valid":true}, Total_Qualtiy_Votes, Total_Ai_Votes} 
+
+
+
+Get Echo Score
+
+curl -X GET "http://localhost:7011/get-echo-score?echo_id=5"
+
+    Response : {"Echo_Quality":{"Float64":4,"Valid":true},"Echo_AI_Usage":{"Float64":2,"Valid":true},"Total_Qualtiy_Votes":1,"Total_Ai_Votes":1}

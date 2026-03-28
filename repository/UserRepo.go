@@ -1,12 +1,13 @@
 package repository
 
 import (
-        "database/sql"
-        "log"
-        "GoServer/models"
-		"strings"
-		"fmt"
-        )
+	"GoServer/models"
+	"database/sql"
+	"fmt"
+	"log"
+	"strings"
+
+)
 
 type UserRepo interface {
     CreateNewUser(user *models.UserData, auth *models.UserAuth) error
@@ -20,6 +21,17 @@ type UserRepo interface {
 	GetAllFollowees(followerID int64) ([]int64 ,error)
 	AddConnection(requesterID int64, respondentID int64) (error)
 	SearchWithKeyword(keyword string) ([]int64, error)
+	AddVideoInUserHistory(userID int64, videoID int64)(error)
+	AllUsersReturn(limit int, offset int) ([]int64, error)
+	GetFollowingInfo(userID, requesterID int64)(models.FollowData, error)
+	UserSavedEco(userID int64, ecoID int64)(bool, error)
+	UserSavedVideo(userID int64, videoID int64) (bool, error)
+	UserEcoSavedStatus(userID int64, ecoID int64)(bool, error)
+	UserVideoSavedStatus(userID int64, videoID int64) (bool, error)
+	GetTurbomaxStatusOfUser(userID int64)(bool, error)
+	GetUserAnalytics(userID int64)(map[string]map[string]int, error)
+	UpsertVideoVote(videoID, userID int64, quality, aiUsage int) error
+	UpsertEcoVote(ecoID, userID int64, quality, aiUsage int) error
 }
 
 
@@ -52,8 +64,8 @@ func (r *PostgresUserRepo) CreateNewUser(user *models.UserData, auth *models.Use
 
 
     userQuery := `
-		INSERT INTO user_data_table (user_handle, user_profile_name, user_description, from_location,  gender)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO user_data_table (user_handle, user_profile_name, user_description, from_location,  gender, url)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING user_id
 	`
 	err = tx.QueryRow(userQuery,
@@ -61,12 +73,12 @@ func (r *PostgresUserRepo) CreateNewUser(user *models.UserData, auth *models.Use
 		user.UserProfileName,
 		user.UserDescription,
 		user.FromLocation,
-		// user.UserDateOfBirth,
 		user.Gender,
+		user.Url,
 	).Scan(&user.UserID)
 	if err != nil {
         log.Printf("Error inserting into user_data_table: %v", err)
-        return err
+         return fmt.Errorf("error inserting into user_data_table table", err)
 	}
 
 
@@ -83,8 +95,8 @@ func (r *PostgresUserRepo) CreateNewUser(user *models.UserData, auth *models.Use
 		auth.UserHashedPassword,
 	).Scan(&auth.AuthID)
 	if err != nil {
-		log.Printf("Error inserting into user_authentication table")
-        return err
+		
+        return fmt.Errorf("error inserting into user_authentication table", err)
 	}
 
 
@@ -359,3 +371,273 @@ func (r *PostgresUserRepo)AddConnection(user1ID int64, user2ID int64) (error){
 	_, err := r.db.Exec(query, user1ID, user2ID)
 	return err
 }
+
+func (r *PostgresUserRepo)AddVideoInUserHistory(userID int64, videoID int64)(error){
+	query := `
+		INSERT INTO video_history_table (watcher_id, video_id)
+		VALUES ($1, $2)
+	`
+	_, err := r.db.Exec(query, userID, videoID)
+	if err != nil {
+		return fmt.Errorf("failed to insert video history: %w", err)
+	}
+	return nil
+}
+
+
+
+func (r *PostgresUserRepo) AllUsersReturn(limit int, offset int) ([]int64, error) {
+	query := `
+        SELECT user_id
+        FROM user_data_table
+        ORDER BY user_id ASC
+        LIMIT $1 OFFSET $2;
+    `
+
+	rows, err := r.db.Query(query, limit, offset)
+	if err != nil {
+		log.Printf("AllUsersReturn: query failed - %v", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var userIDs []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		userIDs = append(userIDs, id)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return userIDs, nil
+}
+
+func (r *PostgresUserRepo) GetFollowingInfo(userID, requesterID int64) (models.FollowData, error) {
+	var data models.FollowData
+
+	followerQuery := `SELECT COUNT(*) FROM follow_table WHERE followee_id = $1`
+	if err := r.db.QueryRow(followerQuery, userID).Scan(&data.FollowerCount); err != nil {
+		return data, fmt.Errorf("failed to get follower count: %w", err)
+	}
+
+	followeeQuery := `SELECT COUNT(*) FROM follow_table WHERE follower_id = $1`
+	if err := r.db.QueryRow(followeeQuery, userID).Scan(&data.FolloweeCount); err != nil {
+		return data, fmt.Errorf("failed to get followee count: %w", err)
+	}
+
+	if requesterID > 0 && requesterID != userID {
+		existsQuery := `
+			SELECT EXISTS(
+				SELECT 1 
+				FROM follow_table 
+				WHERE follower_id = $1 AND followee_id = $2
+			)`
+		if err := r.db.QueryRow(existsQuery, requesterID, userID).Scan(&data.AlreadyFollowed); err != nil {
+			return data, fmt.Errorf("failed to check follow status: %w", err)
+		}
+	}
+
+	return data, nil
+}
+
+func (r *PostgresUserRepo)UserSavedVideo(userID int64, videoID int64)(bool, error){
+	var exists bool
+	err := r.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM saved_videos WHERE user_id = $1 AND video_id = $2)`, userID, videoID).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("failed to check video existence: %w", err)
+	}
+	
+	if exists {
+		_, err = r.db.Exec(`DELETE FROM saved_videos WHERE user_id = $1 AND video_id = $2`, userID, videoID)
+		if err != nil {
+			return false, fmt.Errorf("failed to delete video: %w", err)
+		}
+		_, err = r.db.Exec(`UPDATE video_data SET saves_count = GREATEST(saves_count - 1, 0) WHERE video_id = $1`, videoID)
+		if err != nil {
+			return false, fmt.Errorf("failed to decrement saves_count: %w", err)
+		}
+		return false, nil
+	} else {
+		_, err = r.db.Exec(`INSERT INTO saved_videos (user_id, video_id) VALUES ($1, $2)`, userID, videoID)
+		if err != nil {
+			return false, fmt.Errorf("failed to save video: %w", err)
+		}
+		_, err = r.db.Exec(`UPDATE video_data SET saves_count = saves_count + 1 WHERE video_id = $1`, videoID)
+		if err != nil {
+			return false, fmt.Errorf("failed to increment saves_count: %w", err)
+		}
+		return true, nil
+	}
+}
+
+func (r *PostgresUserRepo)UserSavedEco(userID int64, ecoID int64)(bool, error){
+	var exists bool
+	err := r.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM saved_ecos WHERE user_id = $1 AND eco_id = $2)`, userID, ecoID).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("failed to check eco existence: %w", err)
+	}
+	
+	if exists {
+		_, err = r.db.Exec(`DELETE FROM saved_ecos WHERE user_id = $1 AND eco_id = $2`, userID, ecoID)
+		if err != nil {
+			return false, fmt.Errorf("failed to delete eco: %w", err)
+		}
+		_, err = r.db.Exec(`UPDATE eco_data SET saves_count = GREATEST(saves_count - 1, 0) WHERE eco_id = $1`, ecoID)
+		if err != nil {
+			return false, fmt.Errorf("failed to decrement saves_count: %w", err)
+		}
+		return false, nil
+	} else {
+		_, err = r.db.Exec(`INSERT INTO saved_ecos (user_id, eco_id) VALUES ($1, $2)`, userID, ecoID)
+		if err != nil {
+			return false, fmt.Errorf("failed to save eco: %w", err)
+		}
+		_, err = r.db.Exec(`UPDATE eco_data SET saves_count = saves_count + 1 WHERE eco_id = $1`, ecoID)
+		if err != nil {
+			return false, fmt.Errorf("failed to increment saves_count: %w", err)
+		}
+		return true, nil
+	}
+}
+
+func (r *PostgresUserRepo)UserVideoSavedStatus(userID int64, videoID int64)(bool, error){
+	var exists bool
+	err := r.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM saved_videos WHERE user_id = $1 AND video_id = $2)`, userID, videoID).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("failed to check video existence: %w", err)
+	}
+	
+	return exists, nil
+}
+
+func (r *PostgresUserRepo)UserEcoSavedStatus(userID int64, ecoID int64)(bool, error){
+	var exists bool
+	err := r.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM saved_ecos WHERE user_id = $1 AND eco_id = $2)`, userID, ecoID).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("failed to check eco existence: %w", err)
+	}
+	
+	return exists, nil
+}
+
+func (r * PostgresUserRepo)GetTurbomaxStatusOfUser(userID int64)(bool, error){
+	var subscription_active bool
+	query := `
+		SELECT 
+			(is_active = TRUE AND expiry_date > NOW()) AS active
+		FROM turbomax_status_table
+		WHERE user_id = $1
+		ORDER BY turbomax_id DESC
+		LIMIT 1;
+`
+	err := r.db.QueryRow(query, userID).Scan(&subscription_active)
+	if err == sql.ErrNoRows{
+		return false , nil
+	}
+	if err!= nil{
+		return false , err
+	}
+	return subscription_active, nil
+
+}
+
+
+func (r *PostgresUserRepo) GetUserAnalytics(userID int64) (map[string]map[string]int, error) {
+	result := make(map[string]map[string]int)
+	result["VideoUploads"] = make(map[string]int)
+	result["EcoUploads"] = make(map[string]int)
+
+	queryVideoUploads := `
+		SELECT
+			TO_CHAR(upload_time::date, 'YYYY-MM-DD') AS day,
+			COUNT(*) AS count
+		FROM video_data
+		WHERE uploader_id = $1
+		GROUP BY upload_time::date
+		ORDER BY upload_time::date;`
+
+	rows, err := r.db.Query(queryVideoUploads, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var day string
+		var count int
+		if err := rows.Scan(&day, &count); err != nil {
+			return nil, err
+		}
+		result["VideoUploads"][day] = count
+	}
+
+	queryEcoUploads := `
+		SELECT
+			TO_CHAR(created_at::date, 'YYYY-MM-DD') AS day,
+			COUNT(*) AS count
+		FROM eco_data
+		WHERE uploader_id = $1
+		GROUP BY created_at::date
+		ORDER BY created_at::date;`
+
+	rows, err = r.db.Query(queryEcoUploads, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var day string
+		var count int
+		if err := rows.Scan(&day, &count); err != nil {
+			return nil, err
+		}
+		result["EcoUploads"][day] = count
+	}
+
+	return result, nil
+}
+
+func (r *PostgresUserRepo) UpsertVideoVote(
+	videoID, userID int64,
+	quality, aiUsage int,
+) error {
+
+	query := `
+	INSERT INTO video_votes (video_id, user_id, quality, ai_usage)
+	VALUES ($1, $2, $3, $4)
+	ON CONFLICT (video_id, user_id)
+	DO UPDATE SET
+		quality = EXCLUDED.quality,
+		ai_usage = EXCLUDED.ai_usage,
+		updated_at = now();
+	`
+
+	_, err := r.db.Exec(query, videoID, userID, quality, aiUsage)
+	return err
+}
+
+func (r *PostgresUserRepo) UpsertEcoVote(
+	ecoID, userID int64,
+	quality, aiUsage int,
+) error {
+
+	query := `
+	INSERT INTO eco_votes (eco_id, user_id, quality, ai_usage)
+	VALUES ($1, $2, $3, $4)
+	ON CONFLICT (eco_id, user_id)
+	DO UPDATE SET
+		quality = EXCLUDED.quality,
+		ai_usage = EXCLUDED.ai_usage,
+		updated_at = now();
+	`
+
+	_, err := r.db.Exec(query, ecoID, userID, quality, aiUsage)
+	return err
+}
+

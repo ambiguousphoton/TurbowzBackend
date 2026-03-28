@@ -150,6 +150,59 @@ func getFollowees(w http.ResponseWriter, r *http.Request, userRepo repository.Us
 }
 
 
+func getFollowingInfo(w http.ResponseWriter, r *http.Request, userRepo repository.UserRepo) error {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		log.Println("getFollowingInfo: Wrong method")
+		return nil
+	}
+
+	// ---- Read userID ----
+	userIDStr := r.URL.Query().Get("userID")
+	if userIDStr == "" {
+		http.Error(w, "Missing userID parameter", http.StatusBadRequest)
+		return nil
+	}
+
+	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid userID", http.StatusBadRequest)
+		log.Println("getFollowingInfo: Error converting userID:", err)
+		return err
+	}
+
+	// ---- Read requesterID (optional) ----
+	requesterIDStr := r.URL.Query().Get("requesterID")
+	var requesterID int64 = 0
+
+	if requesterIDStr != "" {
+		requesterID, err = strconv.ParseInt(requesterIDStr, 10, 64)
+		if err != nil {
+			http.Error(w, "Invalid requesterID", http.StatusBadRequest)
+			log.Println("getFollowingInfo: Error converting requesterID:", err)
+			return err
+		}
+	}
+
+	// ---- Get Follow Info ----
+	response, err := userRepo.GetFollowingInfo(userID, requesterID)
+	if err != nil {
+		http.Error(w, "Failed to fetch follow info", http.StatusInternalServerError)
+		log.Println("getFollowingInfo: Repo error:", err)
+		return err
+	}
+
+	// ---- Send JSON ----
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Println("getFollowingInfo: JSON Encode error:", err)
+		return err
+	}
+
+	return nil
+}
+
+
 
 func main(){
 	dbDestination := "host=localhost port=5454 user=postgres password=Narayan!123 dbname=MetaDataStorage sslmode=disable"
@@ -174,21 +227,30 @@ func main(){
 	}))
 
 
-	http.HandleFunc("/get-followers", authenticator.RequireAuth(func(w http.ResponseWriter, r *http.Request){
+	http.HandleFunc("/get-followers", func(w http.ResponseWriter, r *http.Request){
 		err := getFollowers(w, r, UserRepo)
 		if err != nil{
 			http.Error(w, "failed get-followers" , http.StatusInternalServerError)
 			return
 		}
-	}))
+	})
 
-	http.HandleFunc("/get-followees", authenticator.RequireAuth(func(w http.ResponseWriter, r *http.Request){
+	http.HandleFunc("/get-followees", func(w http.ResponseWriter, r *http.Request){
 		err := getFollowees(w, r, UserRepo)
 		if err != nil{
 			http.Error(w, "Failed to get-followees" , http.StatusInternalServerError)
 			return
 		}
-	}))
+	})
+
+	http.HandleFunc("/get-following-info", func(w http.ResponseWriter, r *http.Request){
+		err := getFollowingInfo(w, r, UserRepo)
+		if err != nil{
+			http.Error(w, "Failed to get-followees" , http.StatusInternalServerError)
+			return
+		}
+	})
+	
 	
 	log.Println("Server Started at Port 8010")
 	err := http.ListenAndServe(":8010", nil)

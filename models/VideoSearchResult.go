@@ -4,10 +4,12 @@ package models
 type VideoSearchResult struct {
     VideoID    int
     UploaderName  string
+    UploaderHandle string
     Title  string
     Views int
 	VideoURL   string
     Date string
+    Tags []string
 }
 
 // type VideoSearchResult struct {

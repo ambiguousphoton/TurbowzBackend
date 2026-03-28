@@ -49,7 +49,12 @@ Uploading
 
 
 
+-  10% of work with 90% benifit
 
+
+
+
+/// 
 
 
 
@@ -81,3 +86,12 @@ Uploading
     NOTES
 
     - AV1 could be used for compression
+
+
+
+
+
+///////////////
+
+
+Latency

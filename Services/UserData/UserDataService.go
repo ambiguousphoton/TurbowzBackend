@@ -1,19 +1,21 @@
 package main
 
 import (
+	"GoServer/authenticator"
 	"GoServer/models"
 	"GoServer/repository"
+	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"fmt"
-	"time"
-	"github.com/golang-jwt/jwt/v5"
-	"GoServer/authenticator"
-	_ "github.com/lib/pq" // postgres driver
-	"golang.org/x/crypto/bcrypt" // encrytion
-	"encoding/json"
 	"strconv"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
+	_ "github.com/lib/pq"        // postgres driver
+	"golang.org/x/crypto/bcrypt" // encrytion
 )
 
 
@@ -31,14 +33,13 @@ func createNewUser(w http.ResponseWriter, r * http.Request, UserRepo repository.
 		return nil
 	}
 
-
-
 	err := r.ParseForm()
 	if err != nil {
 		log.Printf("createNewUser: Failed to parse form data - %v", err)
 		http.Error(w, "Error parsing form: "+err.Error(), http.StatusBadRequest)
 		return err
 	}
+	
 
 	userHandle := r.FormValue("user_handle")
 	profileName := r.FormValue("user_profile_name")
@@ -49,9 +50,11 @@ func createNewUser(w http.ResponseWriter, r * http.Request, UserRepo repository.
 	email := r.FormValue("email")	
 	phoneNumber := r.FormValue("phoneNumber")
 	password := r.FormValue("password")
-
+	url  := uuid.New().String()
 	userhashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	log.Print("->",password, r.FormValue("password"),"<-")
 	if err != nil {
+		log.Print("setting password for user",userHandle,password)
 		log.Printf("createNewUser: Failed to hash password for user %s - %v", userHandle, err)
 		http.Error(w, "Problem with Password", http.StatusInternalServerError)
 		return err
@@ -64,6 +67,8 @@ func createNewUser(w http.ResponseWriter, r * http.Request, UserRepo repository.
 		FromLocation:    fromLocation,
 		// UserDateOfBirth: userDateOfBirth,
 		Gender:          userGender,
+		Url: 			 url,	
+
 	}
 
 	auth := &models.UserAuth{
@@ -72,7 +77,7 @@ func createNewUser(w http.ResponseWriter, r * http.Request, UserRepo repository.
 		UserHashedPassword: string(userhashedPassword),
 	}
 
-
+	log.Print("Pswd goin to save : ", auth.UserHashedPassword,"hashed pwsd", userhashedPassword, "pswd", password)
 	err = UserRepo.CreateNewUser(user, auth)
 	if err != nil {
 		log.Printf("createNewUser: Failed to create user in database for handle %s - %v", userHandle, err)
@@ -81,7 +86,7 @@ func createNewUser(w http.ResponseWriter, r * http.Request, UserRepo repository.
 	log.Printf("User created with UserHandle = %v, UserID = %v, AuthID = %v\n",user.UserHandle, user.UserID, auth.AuthID)
 
 	// Create JWT
-	expirationTime := time.Now().Add(15 * time.Minute)
+	expirationTime := time.Now().Add(tokenValidityDuration)
 	claims := &models.Claims{
 		UserID:     user.UserID,
 		UserHandle: user.UserHandle,
@@ -261,6 +266,9 @@ func SearchUsers(w http.ResponseWriter, r *http.Request, UserRepo repository.Use
 		log.Println("keyword: parameter is missing")
 		return fmt.Errorf("keyword is required")
 	}
+
+
+
 	log.Println("SearchUsers: Searching users with keyword:", keyword)
 	
 	userIDList, err := UserRepo.SearchWithKeyword(keyword)
@@ -274,7 +282,188 @@ func SearchUsers(w http.ResponseWriter, r *http.Request, UserRepo repository.Use
 	return nil
 }
 
+func 	saveVideoHandler(w http.ResponseWriter, r *http.Request, UserRepo repository.UserRepo) error{
+	if r.Method != http.MethodPost{
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		log.Printf("SaveVideo: Method not allowed - received %s, expected POST", r.Method)
+		return nil
+	}
 
+	userID, ok := r.Context().Value("userID").(int64)
+	if !ok  {
+		log.Printf("saveVideoHandler: Invalid or missing userID in context")
+		http.Error(w, "Error InvalidUserId ", http.StatusBadRequest)
+		return fmt.Errorf("InvalidUserId")
+	}
+
+	videoIDStr := r.URL.Query().Get("videoID")
+	if videoIDStr == ""{
+		http.Error(w, "videoID is required", http.StatusBadRequest)
+		log.Println("saveVideoHandler: videoID query parameter is missing")
+		return 	fmt.Errorf("videoID is required")
+	}
+
+	videoID, err := strconv.ParseInt(videoIDStr, 10, 64)
+	if err != nil{
+		http.Error(w, "Invalid videoID format", http.StatusBadRequest)
+		log.Printf("saveVideoHandler: Invalid videoID format for input %s - %v", videoIDStr, err)
+		return fmt.Errorf("invalid videoID format")
+	}
+
+	saved, err := UserRepo.UserSavedVideo(userID, videoID)
+	if err != nil{
+		http.Error(w, "Error saving watched video: "+err.Error(), http.StatusInternalServerError)
+		log.Printf("saveVideoHandler: Error saving video for user_id %d and video_id %d - %v", userID, videoID, err)
+		return err
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]bool{"saved": saved})
+	log.Printf("Saved watched video for user_id %d and video_id %d", userID, videoID)
+	return nil
+}
+
+func saveEcoHandler(w http.ResponseWriter, r *http.Request, UserRepo repository.UserRepo) error{
+	if r.Method != http.MethodPost{
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		log.Printf("SaveEco: Method not allowed - received %s, expected POST", r.Method)
+		return nil
+	}
+
+	userID, ok := r.Context().Value("userID").(int64)
+	if !ok  {
+		log.Printf("saveEcoHandler: Invalid or missing userID in context")
+		http.Error(w, "Error InvalidUserId ", http.StatusBadRequest)
+		return fmt.Errorf("InvalidUserId")
+	}
+
+	ecoIDstr := r.URL.Query().Get("ecoID")
+	ecoID, err := strconv.ParseInt(ecoIDstr, 10, 64)
+	if err != nil{
+		http.Error(w, "Invalid ecoID format", http.StatusBadRequest)
+		log.Printf("saveEcoHandler: Invalid ecoID format for input %s - %v", ecoIDstr, err)
+		return fmt.Errorf("invalid ecoID format")
+	}
+
+
+	saved,err := UserRepo.UserSavedEco(userID, ecoID)
+	if err != nil{
+		http.Error(w, "Error checking saved status for ECO data: "+err.Error(), http.StatusInternalServerError)
+		log.Printf("saveEcoHandler: Error checking saved status for for user_id %d - %v", userID, err)
+		return err
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]bool{"saved": saved})
+	log.Printf("Saved ECO data for user_id %d", userID)
+	return nil
+}
+
+func getEcoSavedStatus(w http.ResponseWriter, r *http.Request, UserRepo repository.UserRepo) error{
+	if r.Method != http.MethodPost{
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		log.Printf("getEcoSavedStatus: Method not allowed - received %s, expected POST", r.Method)
+		return nil
+	}
+
+	userID, ok := r.Context().Value("userID").(int64)
+	if !ok  {
+		log.Printf("getEcoSavedStatus: Invalid or missing userID in context")
+		http.Error(w, "Error InvalidUserId ", http.StatusBadRequest)
+		return fmt.Errorf("InvalidUserId")
+	}
+
+	ecoIDstr := r.URL.Query().Get("ecoID")
+	ecoID, err := strconv.ParseInt(ecoIDstr, 10, 64)
+	if err != nil{
+		http.Error(w, "Invalid ecoID format", http.StatusBadRequest)
+		log.Printf("getEcoSavedStatus: Invalid ecoID format for input %s - %v", ecoIDstr, err)
+		return fmt.Errorf("invalid ecoID format")
+	}
+
+
+	saved,err := UserRepo.UserEcoSavedStatus(userID, ecoID)
+	if err != nil{
+		http.Error(w, "Error saving ECO data: "+err.Error(), http.StatusInternalServerError)
+		log.Printf("getEcoSavedStatus: Error saving ECO data for user_id %d - %v", userID, err)
+		return err
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]bool{"saved": saved})
+	log.Printf("getEcoSavedStatus ECO data for user_id %d", userID)
+	return nil
+}
+
+func getVideoSavedStatus(w http.ResponseWriter, r *http.Request, UserRepo repository.UserRepo) error{
+	if r.Method != http.MethodPost{
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		log.Printf("getVideoSavedStatus: Method not allowed - received %s, expected POST", r.Method)
+		return nil
+	}
+
+	userID, ok := r.Context().Value("userID").(int64)
+	if !ok  {
+		log.Printf("getVideoSavedStatus: Invalid or missing userID in context")
+		http.Error(w, "Error InvalidUserId ", http.StatusBadRequest)
+		return fmt.Errorf("InvalidUserId")
+	}
+
+	videoIDStr := r.URL.Query().Get("videoID")
+	if videoIDStr == ""{
+		http.Error(w, "videoID is required", http.StatusBadRequest)
+		log.Println("getVideoSavedStatus: videoID query parameter is missing")
+		return 	fmt.Errorf("videoID is required")
+	}
+
+	videoID, err := strconv.ParseInt(videoIDStr, 10, 64)
+	if err != nil{
+		http.Error(w, "Invalid videoID format", http.StatusBadRequest)
+		log.Printf("getVideoSavedStatus: Invalid videoID format for input %s - %v", videoIDStr, err)
+		return fmt.Errorf("invalid videoID format")
+	}
+
+	saved, err := UserRepo.UserVideoSavedStatus(userID, videoID)
+	if err != nil{
+		http.Error(w, "Error saving watched video: "+err.Error(), http.StatusInternalServerError)
+		log.Printf("getVideoSavedStatus: Error checking saved status for  video for user_id %d and video_id %d - %v", userID, videoID, err)
+		return err
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]bool{"saved": saved})
+	log.Printf("Saved watched video for user_id %d and video_id %d", userID, videoID)
+	return nil
+}
+
+
+func turbomaxStatusCheck(w http.ResponseWriter, r *http.Request, UserRepo repository.UserRepo) {
+	if r.Method != http.MethodGet{
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		log.Printf("turbomaxStatusCheck: Method not allowed - received %s, expected GET", r.Method)
+		return
+	}
+	userIDStr := r.URL.Query().Get("userID")
+	if userIDStr == ""{
+		http.Error(w, "userID is required", http.StatusBadRequest)
+		log.Println("turbomaxStatusCheck: userID query parameter is missing")
+		return 	
+	}
+
+	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil{
+		http.Error(w, "Invalid userIDStr format", http.StatusBadRequest)
+		log.Printf("turbomaxStatusCheck: Invalid userID format for input %s - %v", userIDStr, err)
+		return 
+	}
+	status, err := UserRepo.GetTurbomaxStatusOfUser(userID)
+	if err != nil{
+		http.Error(w,"Error Occured while getting status", http.StatusInternalServerError)
+		log.Println("Error Occured while getting status from db : ",err.Error())
+	}
+	log.Println("Returning status of turbomax for userID", userID, "status", status)
+	json.NewEncoder(w).Encode(map[string]bool{"turbomax_active": status})
+}
 
 
 func withCORS(next http.Handler) http.Handler {
@@ -291,13 +480,6 @@ func withCORS(next http.Handler) http.Handler {
         next.ServeHTTP(w, r)
     })
 }
-
-
-
-
-
-
-
 
 
 func main() {
@@ -354,6 +536,28 @@ func main() {
 			http.Error(w, "Failed to search for Users" , http.StatusInternalServerError)
 			return
 		}
+	})
+
+	mux.HandleFunc("/video-saved-status", authenticator.RequireAuth(func(w http.ResponseWriter, r *http.Request) {
+		getVideoSavedStatus(w, r, UserRepo)
+	}))
+
+	mux.HandleFunc("/eco-saved-status", authenticator.RequireAuth(func(w http.ResponseWriter, r *http.Request) {
+		getEcoSavedStatus(w, r, UserRepo)
+	}))
+
+	mux.HandleFunc("/save-video", authenticator.RequireAuth(func(w http.ResponseWriter, r *http.Request) {
+		saveVideoHandler(w, r, UserRepo)
+	}))
+
+	mux.HandleFunc("/save-eco", authenticator.RequireAuth(func(w http.ResponseWriter, r *http.Request) {	
+		
+		saveEcoHandler(w, r, UserRepo)
+	}))
+
+
+	mux.HandleFunc("/get-turbomax-status", func(w http.ResponseWriter, r*http.Request){
+		turbomaxStatusCheck(w,r, UserRepo)
 	})
 	
 	log.Println("UserDataService Started at Port 8100")
