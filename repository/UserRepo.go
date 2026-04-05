@@ -86,7 +86,7 @@ func (r *PostgresUserRepo) CreateNewUser(user *models.UserData, auth *models.Use
 
     authQuery := `
 		INSERT INTO user_authentication (user_id, user_login_account, user_phone_number, user_hashed_password, account_created_at)
-		VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+		VALUES ($1, $2, NULLIF($3, ''), $4, CURRENT_TIMESTAMP)
 		RETURNING auth_id
 	`
 	err = tx.QueryRow(authQuery,

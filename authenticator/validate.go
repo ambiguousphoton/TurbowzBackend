@@ -35,7 +35,7 @@ func ValidateEmail(email string) error {
 
 func ValidatePhone(phone string) error {
 	if phone == "" {
-		return fmt.Errorf("phone number is required")
+		return nil
 	}
 	if !phoneRegex.MatchString(phone) {
 		return fmt.Errorf("phone number must be 7-15 digits, optional leading +")
