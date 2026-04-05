@@ -330,22 +330,6 @@ func main() {
 		getVideoScore(w, r, VMDrepo)
 	})
 
-	http.HandleFunc("/video-status", func(w http.ResponseWriter, r *http.Request) {
-		videoIDStr := r.URL.Query().Get("video_id")
-		videoID, err := strconv.ParseInt(videoIDStr, 10, 64)
-		if err != nil {
-			http.Error(w, "invalid video_id", http.StatusBadRequest)
-			return
-		}
-		status, err := VMDrepo.GetProcessingStatus(videoID)
-		if err != nil {
-			http.Error(w, "video not found", http.StatusNotFound)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": status})
-	})
-
 	log.Println("VMD GETER Server Started at Port 7999")
 	err := http.ListenAndServe(":7999", nil)
 	if err != nil{

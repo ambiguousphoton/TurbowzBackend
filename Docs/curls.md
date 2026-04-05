@@ -59,6 +59,9 @@ curl -X POST http://localhost:8080/upload \
   -F 'tags=["fun","college","hostel"]' \
   -H "Authorization: <auth token>"
 
+  Response: {"video_id":123,"status":"processing"}
+  Video is processed asynchronously (HLS encoding, thumbnail, vectorization).
+
 
 Push Comment on a Video
 

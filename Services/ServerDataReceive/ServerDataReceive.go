@@ -163,9 +163,6 @@ func saveVideoOnServer(w http.ResponseWriter, r *http.Request, vmdRepo repositor
 			resp.Body.Close()
 		}
 
-		if err := vmdRepo.UpdateProcessingStatus(video_id, "ready"); err != nil {
-			log.Printf("saveVideoOnServer: Failed to update processing status for video %d - %v", video_id, err)
-		}
 		log.Printf("saveVideoOnServer: Background processing complete for video %s (id: %d)", video_url, video_id)
 	}()
 

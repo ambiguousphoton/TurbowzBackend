@@ -13,8 +13,6 @@ import (
 // Interface
 type VMDrepo interface {
     CreateNewVMD(vmd *models.VideoMetaData) (int64, error)
-    UpdateProcessingStatus(videoID int64, status string) error
-    GetProcessingStatus(videoID int64) (string, error)
     SearchVMDs(keyword string, limit, offset int) ([]models.VideoSearchResult, error)
     GetSpecificVideoMD(video_id int64, user_id int64) ( models.VideoMetaData, error)
     VideoViewUpdate(video_id int64) error
@@ -46,7 +44,7 @@ func NewPostgresVMDRepo(db *sql.DB) VMDrepo {
 
 /// CreateNewVMD for Postgres
 func (r *PostgresVMDRepo) CreateNewVMD(vmd *models.VideoMetaData) (int64, error) {
-    query := `INSERT INTO video_data(uploader_id, title, video_info, video_url, tags, processing_status) VALUES($1, $2, $3, $4, $5, 'processing') RETURNING video_id`
+    query := `INSERT INTO video_data(uploader_id, title, video_info, video_url, tags) VALUES($1, $2, $3, $4, $5) RETURNING video_id`
 
     var videoID int64
     err := r.db.QueryRow(query,
@@ -65,22 +63,6 @@ func (r *PostgresVMDRepo) CreateNewVMD(vmd *models.VideoMetaData) (int64, error)
     log.Printf("CreateNewVMD: Successfully created video metadata for user %d, video %s (title: %s, video_id: %d)", vmd.Uploader_ID, vmd.Video_Url, vmd.Title, videoID)
     return videoID, nil
 }
-
-func (r *PostgresVMDRepo) UpdateProcessingStatus(videoID int64, status string) error {
-    _, err := r.db.Exec(`UPDATE video_data SET processing_status = $1 WHERE video_id = $2`, status, videoID)
-    if err != nil {
-        log.Printf("UpdateProcessingStatus: Failed for video_id %d - %v", videoID, err)
-    }
-    return err
-}
-
-func (r *PostgresVMDRepo) GetProcessingStatus(videoID int64) (string, error) {
-    var status string
-    err := r.db.QueryRow(`SELECT processing_status FROM video_data WHERE video_id = $1`, videoID).Scan(&status)
-    return status, err
-}
-
-
 
 func (r *PostgresVMDRepo) SearchVMDs(keyword string, limit, offset int) ([]models.VideoSearchResult, error) {
     query := `
