@@ -23,16 +23,30 @@ func EncodeVideoToHLS(videoUID string) {
 
 	// FFmpeg command: compress + HLS in one step
 	cmd := exec.Command("./Services/ServerDataReceive/tools/ffmpeg",
-		"-i", input,                // input file
-		"-c:v", "libx264",          // H.264 video codec
-		"-preset", "fast",          // encoding speed/efficiency tradeoff
-		"-crf", "23",                // quality (lower = better quality, bigger file)
-		"-c:a", "aac",              // audio codec
-		"-b:a", "128k",             // audio bitrate
-		"-hls_time", "6",           // segment length (seconds)
-		"-hls_list_size", "0",      // include all segments in playlist
-		"-f", "hls",                // output format
-		outputM3U8,                 // playlist output
+		"-i", input,
+
+		"-r", "30",                 // better UX than 24 for mobile
+		"-g", "60",                 // 2x FPS
+
+		"-c:v", "libx264",
+		"-preset", "veryfast",      // faster encoding (important for scale)
+		"-crf", "25",               // slightly lower quality → huge savings
+		"-maxrate", "800k",         // cap bitrate (VERY important)
+		"-bufsize", "1200k",
+
+		"-vf", "scale=720:-2",      // force 720p (TikTok-like)
+
+		"-c:a", "aac",
+		"-b:a", "96k",              // reduce audio bitrate
+
+		"-movflags", "+faststart",  // faster playback start
+
+		"-hls_time", "4",           // shorter segments → faster start
+		"-hls_list_size", "0",
+		"-hls_flags", "independent_segments",
+
+		"-f", "hls",
+		outputM3U8,
 	)
 
 	// Optional: stream ffmpeg output to terminal
