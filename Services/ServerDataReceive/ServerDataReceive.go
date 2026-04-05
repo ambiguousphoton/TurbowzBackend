@@ -130,40 +130,44 @@ func saveVideoOnServer(w http.ResponseWriter, r *http.Request, vmdRepo repositor
 	
 	///-------------------------------------- end Save meta data to DB
 
-	/////// -------------------------- Compression & Encoding -----------------------------------------
-
 	binaryFile.Sync()
 
-	tools.EncodeVideoToHLS(video_url)
+	// Return success immediately — process video in background
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"video_id": video_id,
+		"status":   "processing",
+	})
+	log.Printf("saveVideoOnServer: Accepted video %s for user %d (title: %s) — processing async", video_url, uploader_id, title)
 
-	if err = tools.FirstFrameThumbnail(video_url); err != nil{
-		log.Printf("saveVideoOnServer: Failed to create thumbnail for video %s - %v", video_url, err)
-	}
+	// Background processing: encode, thumbnail, vectorize
+	go func() {
+		tools.EncodeVideoToHLS(video_url)
 
-	// tools.EncodeVideoToDASH(uid)
+		if err := tools.FirstFrameThumbnail(video_url); err != nil {
+			log.Printf("saveVideoOnServer: Failed to create thumbnail for video %s - %v", video_url, err)
+		}
 
-	if tags == nil {
+		if tags == nil {
 			tags = []string{}
 		}
-	// Call vectorization API
-	vectorData := map[string]interface{}{
-		"title": title,
-		"description": info,
-		"tags": tags ,
-		"user_name": user_name,
-		"video_id": video_id,
-	}
-	
-	jsonData, _ := json.Marshal(vectorData)
-	resp, err := http.Post("http://localhost:9000/vectorize-video/", "application/json", bytes.NewBuffer(jsonData))
-	if err != nil {
-		log.Printf("saveVideoOnServer: Failed to call vectorization API - %v", err)
-	} else {
-		resp.Body.Close()
-		log.Printf("saveVideoOnServer: Video vectorization completed for video %s", video_url)
-	}
-	
-	log.Printf("saveVideoOnServer: Successfully uploaded video %s for user %d (title: %s)", video_url, uploader_id, title)
+		vectorData := map[string]interface{}{
+			"title": title, "description": info,
+			"tags": tags, "user_name": user_name, "video_id": video_id,
+		}
+		jsonData, _ := json.Marshal(vectorData)
+		resp, err := http.Post("http://localhost:9000/vectorize-video/", "application/json", bytes.NewBuffer(jsonData))
+		if err != nil {
+			log.Printf("saveVideoOnServer: Failed to call vectorization API - %v", err)
+		} else {
+			resp.Body.Close()
+		}
+
+		if err := vmdRepo.UpdateProcessingStatus(video_id, "ready"); err != nil {
+			log.Printf("saveVideoOnServer: Failed to update processing status for video %d - %v", video_id, err)
+		}
+		log.Printf("saveVideoOnServer: Background processing complete for video %s (id: %d)", video_url, video_id)
+	}()
 
 }
 
