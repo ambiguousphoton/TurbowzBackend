@@ -1,28 +1,57 @@
 package tools
 
 import (
+	"log"
+	"os"
 	"os/exec"
+	"path/filepath"
 )
 
 func FirstFrameThumbnail(videoURL string) error {
 	input := "./MediaData/videos/rawVideos/" + videoURL + ".mp4"
 	output := "./MediaData/thumbnails/" + videoURL + ".jpg"
 
-		cmd := exec.Command("./Services/ServerDataReceive/tools/ffmpeg",
-		"-ss", "00:00:01",          // 👈 seek BEFORE input (fast seek)
+	// ✅ Ensure output directory exists
+	err := os.MkdirAll(filepath.Dir(output), os.ModePerm)
+	if err != nil {
+		log.Printf("❌ Failed to create thumbnail directory: %v", err)
+		return err
+	}
+
+	// ✅ Check if input exists
+	if _, err := os.Stat(input); os.IsNotExist(err) {
+		log.Printf("❌ Input video not found: %s", input)
+		return err
+	}
+
+	cmd := exec.Command("./Services/ServerDataReceive/tools/ffmpeg",
+		"-y",                      // overwrite output
+		"-ss", "00:00:01",
 		"-i", input,
 
 		"-frames:v", "1",
 
-		"-vf", "scale=720:1280:force_original_aspect_ratio=decrease," +
-			"pad=720:1280:(ow-iw)/2:(oh-ih)/2:black",
+		"-vf", "thumbnail,scale=720:-2", // safer filter
 
-		"-q:v", "20",               // 👈 smaller size, still good quality
-		"-an",                      // no audio processing (faster)
-		"-sn",                      // no subtitles
+		"-q:v", "20",
+		"-an",
+		"-sn",
 
 		output,
 	)
 
-	return cmd.Run()
+	// ✅ Capture BOTH stdout + stderr
+	outputBytes, err := cmd.CombinedOutput()
+
+	if err != nil {
+		log.Printf("❌ FFmpeg thumbnail failed for video %s", videoURL)
+		log.Printf("📁 Input: %s", input)
+		log.Printf("📁 Output: %s", output)
+		log.Printf("⚠️ Error: %v", err)
+		log.Printf("📜 FFmpeg Output:\n%s", string(outputBytes))
+		return err
+	}
+
+	log.Printf("✅ Thumbnail created successfully for video %s", videoURL)
+	return nil
 }
