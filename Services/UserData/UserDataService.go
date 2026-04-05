@@ -45,16 +45,41 @@ func createNewUser(w http.ResponseWriter, r * http.Request, UserRepo repository.
 	profileName := r.FormValue("user_profile_name")
 	userDescription := r.FormValue("userDescription")
 	fromLocation := r.FormValue("fromLocation")
-	// userDateOfBirth := r.FormValue("userDateOfBirth")
 	userGender := r.FormValue("gender")
-	email := r.FormValue("email")	
+	email := r.FormValue("email")
 	phoneNumber := r.FormValue("phoneNumber")
 	password := r.FormValue("password")
-	url  := uuid.New().String()
+
+	// Validate all required fields
+	if err := authenticator.ValidateUserHandle(userHandle); err != nil {
+		log.Printf("createNewUser: validation failed - %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return err
+	}
+	if err := authenticator.ValidateProfileName(profileName); err != nil {
+		log.Printf("createNewUser: validation failed - %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return err
+	}
+	if err := authenticator.ValidateEmail(email); err != nil {
+		log.Printf("createNewUser: validation failed for handle %s - %v", userHandle, err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return err
+	}
+	if err := authenticator.ValidatePhone(phoneNumber); err != nil {
+		log.Printf("createNewUser: validation failed for handle %s - %v", userHandle, err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return err
+	}
+	if err := authenticator.ValidatePassword(password); err != nil {
+		log.Printf("createNewUser: password validation failed for handle %s", userHandle)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return err
+	}
+
+	url := uuid.New().String()
 	userhashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	log.Print("->",password, r.FormValue("password"),"<-")
 	if err != nil {
-		log.Print("setting password for user",userHandle,password)
 		log.Printf("createNewUser: Failed to hash password for user %s - %v", userHandle, err)
 		http.Error(w, "Problem with Password", http.StatusInternalServerError)
 		return err
@@ -77,7 +102,6 @@ func createNewUser(w http.ResponseWriter, r * http.Request, UserRepo repository.
 		UserHashedPassword: string(userhashedPassword),
 	}
 
-	log.Print("Pswd goin to save : ", auth.UserHashedPassword,"hashed pwsd", userhashedPassword, "pswd", password)
 	err = UserRepo.CreateNewUser(user, auth)
 	if err != nil {
 		log.Printf("createNewUser: Failed to create user in database for handle %s - %v", userHandle, err)
@@ -179,6 +203,12 @@ func UserAuthentication(w http.ResponseWriter, r *http.Request, UserRepo reposit
 
 	UserHandle := r.FormValue("user_handle")
 	inputPassword := r.FormValue("password")
+
+	if UserHandle == "" || inputPassword == "" {
+		log.Printf("UserAuthentication: missing user_handle or password")
+		http.Error(w, "user_handle and password are required", http.StatusBadRequest)
+		return fmt.Errorf("missing credentials")
+	}
 
 	userId, PasswordFrmDB, err := UserRepo.CheckUser(UserHandle)
 	if err != nil{
@@ -466,6 +496,73 @@ func turbomaxStatusCheck(w http.ResponseWriter, r *http.Request, UserRepo reposi
 }
 
 
+func verifyEmail(w http.ResponseWriter, r *http.Request, UserRepo repository.UserRepo, ev *authenticator.EmailVerifier) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		log.Printf("verifyEmail: failed to parse form - %v", err)
+		http.Error(w, "invalid form data", http.StatusBadRequest)
+		return
+	}
+
+	email := r.FormValue("email")
+	if err := authenticator.ValidateEmail(email); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	exists, err := UserRepo.CheckEmailExists(email)
+	if err != nil {
+		log.Printf("verifyEmail: db error checking email - %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	if exists {
+		log.Printf("verifyEmail: email already registered - %s", email)
+		http.Error(w, "email is already registered", http.StatusConflict)
+		return
+	}
+
+	if err := ev.GenerateAndSend(email); err != nil {
+		log.Printf("verifyEmail: failed to send OTP to %s - %v", email, err)
+		http.Error(w, "failed to send verification email", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "verification code sent"})
+}
+
+func confirmEmail(w http.ResponseWriter, r *http.Request, ev *authenticator.EmailVerifier) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		log.Printf("confirmEmail: failed to parse form - %v", err)
+		http.Error(w, "invalid form data", http.StatusBadRequest)
+		return
+	}
+
+	email := r.FormValue("email")
+	code := r.FormValue("otp")
+	if email == "" || code == "" {
+		http.Error(w, "email and otp are required", http.StatusBadRequest)
+		return
+	}
+
+	if !ev.Verify(email, code) {
+		log.Printf("confirmEmail: invalid or expired OTP for %s", email)
+		http.Error(w, "invalid or expired verification code", http.StatusUnauthorized)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "email verified"})
+}
+
 func withCORS(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -489,7 +586,24 @@ func main() {
 
 	UserRepo := repository.NewPostgresUserRepo(db)
 
+	// Email verification — SMTP config
+	emailVerifier := authenticator.NewEmailVerifier(
+		"smtp.gmail.com",
+		"587",
+		"turbowz.official@gmail.com",
+		"TurbowzMail!123",
+		"turbowz.official@gmail.com",
+	)
+
 	mux := http.NewServeMux()
+
+	mux.HandleFunc("/verify-email", func(w http.ResponseWriter, r *http.Request) {
+		verifyEmail(w, r, UserRepo, emailVerifier)
+	})
+
+	mux.HandleFunc("/confirm-email", func(w http.ResponseWriter, r *http.Request) {
+		confirmEmail(w, r, emailVerifier)
+	})
 
 	mux.HandleFunc("/create-new-account", func(w http.ResponseWriter, r *http.Request) {
     	err := createNewUser(w, r, UserRepo)
@@ -567,3 +681,4 @@ func main() {
 		os.Exit(1)
 	}
 }
+

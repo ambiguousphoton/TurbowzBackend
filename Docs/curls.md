@@ -1,7 +1,29 @@
 
 UserData/UserDataService 
 
-creating a new user
+
+Step 1: Verify Email (check availability + send OTP)
+
+curl -X POST http://localhost:8100/verify-email \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "email=krishna@example.com"
+
+Response: {"message": "verification code sent"}
+Errors: 400 invalid email format, 409 email already registered
+
+
+Step 2: Confirm Email OTP
+
+curl -X POST http://localhost:8100/confirm-email \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "email=krishna@example.com" \
+  -d "otp=482917"
+
+Response: {"message": "email verified"}
+Errors: 401 invalid or expired code
+
+
+Step 3: Create Account
 
 curl -X POST http://localhost:8100/create-new-account \
   -H "Content-Type: application/x-www-form-urlencoded" \
@@ -12,10 +34,18 @@ curl -X POST http://localhost:8100/create-new-account \
   -d "userDateOfBirth=1992-07-21" \
   -d "gender=Male" \
   -d "email=krishna@example.com" \
-  -d "phoneNumber=888888888" -d "password=flutePower2024"
+  -d "phoneNumber=888888888" \
+  -d "password=FlutePower2024"
 
 phoneNumber, email, user_handle -> must be unique
 optional ->  fromlocation, userdescription, gender, dob
+
+Validation rules:
+  user_handle: 3-30 chars, alphanumeric/underscore only
+  password: min 8 chars, must have uppercase + lowercase + digit
+  phoneNumber: 7-15 digits, optional leading +
+  email: valid email format
+  user_profile_name: required, max 100 chars
 
 
 
@@ -44,9 +74,10 @@ User Authentication
 curl -X POST http://localhost:8100/authenticate \
 -H "Content-Type: application/x-www-form-urlencoded" \
 -d "user_handle=Aditya" \
--d "password=shinebright" \
+-d "password=Shinebright1"
 
   this returns a jwt token
+  Errors: 400 if user_handle or password is missing
 
 
 Uploading video

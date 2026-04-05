@@ -15,6 +15,7 @@ type UserRepo interface {
 	UpadateUserProfile(user *models.UserData) error
     AddUserAuth(auth *models.UserAuth) error
 	CheckUser(userHandle string) (int64, string, error)
+	CheckEmailExists(email string) (bool, error)
 	FollowUser(FollowerID int64, FolloweeID int64) (error)
 	UnfollowUser(FollowerID int64, FolloweeID int64) (error)
 	GetAllFollowers(FolloweeID int64) ([]int64,error)
@@ -213,6 +214,18 @@ func (r *PostgresUserRepo) CheckUser(userHandle string) (int64, string, error){
 	}
 
 	return userID, passwordHash, nil
+}
+
+func (r *PostgresUserRepo) CheckEmailExists(email string) (bool, error) {
+	var exists bool
+	err := r.db.QueryRow(
+		`SELECT EXISTS(SELECT 1 FROM user_authentication WHERE user_login_account = $1)`,
+		email,
+	).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("failed to check email existence: %w", err)
+	}
+	return exists, nil
 }
 
 

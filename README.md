@@ -157,7 +157,26 @@ go run Services/SocketConnectionService/SocketConnection.go # :8181
 
 ### Authentication
 
-**Create Account**
+**Step 1: Verify Email (check availability + send OTP)**
+```bash
+curl -X POST http://localhost:8100/verify-email \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "email=<email>"
+```
+Returns: `{"message": "verification code sent"}`  
+Errors: `400` invalid email format, `409` email already registered
+
+**Step 2: Confirm Email OTP**
+```bash
+curl -X POST http://localhost:8100/confirm-email \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "email=<email>" \
+  -d "otp=<6-digit-code>"
+```
+Returns: `{"message": "email verified"}`  
+Errors: `401` invalid or expired code
+
+**Step 3: Create Account**
 ```bash
 curl -X POST http://localhost:8100/create-new-account \
   -H "Content-Type: application/x-www-form-urlencoded" \
@@ -168,7 +187,13 @@ curl -X POST http://localhost:8100/create-new-account \
   -d "password=<password>"
 ```
 Optional fields: `userDescription`, `fromLocation`, `gender`, `userDateOfBirth`  
-Unique constraints: `phoneNumber`, `email`, `user_handle`
+Unique constraints: `phoneNumber`, `email`, `user_handle`  
+Validation rules:
+- `user_handle`: 3-30 chars, alphanumeric/underscore only
+- `password`: min 8 chars, must have uppercase + lowercase + digit
+- `phoneNumber`: 7-15 digits, optional leading `+`
+- `email`: valid email format
+- `user_profile_name`: required, max 100 chars
 
 **Login**
 ```bash
@@ -177,7 +202,8 @@ curl -X POST http://localhost:8100/authenticate \
   -d "user_handle=<handle>" \
   -d "password=<password>"
 ```
-Returns: `{"token": "<jwt>", "userID": "<id>"}`
+Returns: `{"token": "<jwt>", "userID": "<id>"}`  
+Errors: `400` missing fields
 
 ### Videos
 
@@ -230,6 +256,8 @@ Returns: `{"token": "<jwt>", "userID": "<id>"}`
 
 | Endpoint | Method | Port | Description |
 |---|---|---|---|
+| `/verify-email` | POST | 8100 | Send OTP to email (checks if email is available) |
+| `/confirm-email` | POST | 8100 | Verify email OTP |
 | `/get-user?userID=` | GET | 8100 | Get user info |
 | `/search-users?keyword=` | GET | 8100 | Search users |
 | `/update-profile` | POST | 8100 | Update profile fields (auth required) |

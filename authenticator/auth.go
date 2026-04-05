@@ -9,7 +9,7 @@ import (
 )
 
 
-var jwtKey = []byte("om namo bhagwate vaudevay") 
+var jwtKey = []byte("om namo bhagwate vaudevay") // TODO: move to environment variable
 
 
 func RequireAuth(next http.HandlerFunc) http.HandlerFunc {
@@ -28,6 +28,7 @@ func RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 			})
 
 			if err != nil || !token.Valid {
+				log.Printf("RequireAuth: invalid or expired token - %v", err)
 				http.Error(w, "invalid token", http.StatusUnauthorized)
 				return
 			}
