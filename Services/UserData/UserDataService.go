@@ -591,7 +591,7 @@ func main() {
 		"smtp.gmail.com",
 		"587",
 		"turbowz.official@gmail.com",
-		"TurbowzMail!123",
+		"pijr hppk ycqy rkxo",
 		"turbowz.official@gmail.com",
 	)
 
