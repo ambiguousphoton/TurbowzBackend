@@ -108,9 +108,18 @@ Optional: parentCommentID (for replies to existing comments, omit for top-level 
 Response: "Commented"
 
 
-Get Comment on a Video
+Get Comment on a Video (top-level only)
 
-curl -X GET "http://localhost:7200/get-comment?videoID=46&limit=10&offset=20"
+curl -X GET "http://localhost:7200/get-comment?videoID=46&limit=10&offset=0"
+
+Returns only top-level comments (parent_comment_id is null)
+
+
+Get Replies on a Video Comment
+
+curl -X GET "http://localhost:7200/get-comment-replies?commentID=5&limit=10&offset=0"
+
+Response: {"replies": [...]}
 
 
 
@@ -128,10 +137,12 @@ Optional: parentCommentID (for replies to existing comments, omit for top-level 
 Response: "Eco Commented"
 
 
-Get Comments on an Eco
+Get Comments on an Eco (top-level only)
 
 curl -X GET "http://localhost:7200/get-eco-comment?ecoID=1&limit=10&offset=0"
-response
+
+Returns only top-level comments (parent_comment_id is null)
+Response:
 {
   "comments": [
     {
@@ -143,24 +154,21 @@ response
       "Commenter_Handle": "krishna_ji",
       "Commenter_Name": "Govinda",
       "Parent_Comment_ID": null
-    },
-    {
-      "Comment_id": 3,
-      "Commenter_id": 99,
-      "Parent_Eco_id": 0,
-      "Comment_text": "radhe radhe",
-      "Comment_date": "2025-01-23T10:05:00Z",
-      "Commenter_Handle": "hero",
-      "Commenter_Name": "Surya",
-      "Parent_Comment_ID": 1
     }
   ],
   "pagination": {
     "limit": 10,
     "offset": 0,
-    "total": 2
+    "total": 1
   }
 }
+
+
+Get Replies on an Eco Comment
+
+curl -X GET "http://localhost:7200/get-eco-comment-replies?commentID=1&limit=10&offset=0"
+
+Response: {"replies": [...]}
 
 
 

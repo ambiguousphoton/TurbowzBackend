@@ -272,6 +272,62 @@ func getEcoComments(w http.ResponseWriter, r *http.Request, CommentRepo reposito
 
 
 
+func getCommentReplies(w http.ResponseWriter, r *http.Request, CommentRepo repository.CommentRepo) error {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not Allowed", http.StatusBadRequest)
+		return fmt.Errorf("method not Allowed")
+	}
+	commentID, err := strconv.ParseInt(r.URL.Query().Get("commentID"), 10, 64)
+	if err != nil {
+		http.Error(w, "Error Invalid Comment ID", http.StatusBadRequest)
+		return err
+	}
+	limit := 20
+	offset := 0
+	if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 {
+		limit = l
+	}
+	if o, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && o >= 0 {
+		offset = o
+	}
+	replies, err := CommentRepo.GetVideoCommentReplies(commentID, limit, offset)
+	if err != nil {
+		http.Error(w, "Error getting replies", http.StatusBadRequest)
+		return err
+	}
+	json.NewEncoder(w).Encode(map[string]interface{}{"replies": replies})
+	return nil
+}
+
+func getEcoCommentReplies(w http.ResponseWriter, r *http.Request, CommentRepo repository.CommentRepo) error {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not Allowed", http.StatusBadRequest)
+		return fmt.Errorf("method not Allowed")
+	}
+	commentID, err := strconv.ParseInt(r.URL.Query().Get("commentID"), 10, 64)
+	if err != nil {
+		http.Error(w, "Error Invalid Comment ID", http.StatusBadRequest)
+		return err
+	}
+	limit := 20
+	offset := 0
+	if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 {
+		limit = l
+	}
+	if o, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && o >= 0 {
+		offset = o
+	}
+	replies, err := CommentRepo.GetEcoCommentReplies(commentID, limit, offset)
+	if err != nil {
+		http.Error(w, "Error getting eco replies", http.StatusBadRequest)
+		return err
+	}
+	json.NewEncoder(w).Encode(map[string]interface{}{"replies": replies})
+	return nil
+}
+
+
+
 func main(){
 
 	dbDestination := "host=localhost port=5454 user=postgres password=Narayan!123 dbname=MetaDataStorage sslmode=disable"
@@ -308,6 +364,19 @@ func main(){
 		}
 	})
 	
+	http.HandleFunc("/get-comment-replies", func(w http.ResponseWriter, r *http.Request) {
+    	err := getCommentReplies(w, r, CommentRepo)
+		if err != nil{
+			log.Print(err)
+		}
+	})
+
+	http.HandleFunc("/get-eco-comment-replies", func(w http.ResponseWriter, r *http.Request) {
+    	err := getEcoCommentReplies(w, r, CommentRepo)
+		if err != nil{
+			log.Print(err)
+		}
+	})
 
 
 	err := http.ListenAndServe(":7200", nil)
