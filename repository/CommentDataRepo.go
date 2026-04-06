@@ -89,19 +89,20 @@ func (r *PostgresCommentRepo) GetVideoComments(video_id int64, limit, offset int
 
 func (r *PostgresCommentRepo) CreateNewEcoComment(new_comment *models.EcoCommentData) (int64, error) {
 	query := `
-		INSERT INTO eco_comments_table (parent_eco_id, commenter_id, comment_text)
-		VALUES ($1, $2, $3)
+		INSERT INTO eco_comments_table (parent_eco_id, commenter_id, comment_text, parent_comment_id)
+		VALUES ($1, $2, $3, $4)
 		RETURNING comment_id;
 	`
 
 	var comment_id int64
-	err := r.db.QueryRow(query, new_comment.Parent_Eco_id, new_comment.Commenter_id, new_comment.Comment_text).
+	err := r.db.QueryRow(query, new_comment.Parent_Eco_id, new_comment.Commenter_id, new_comment.Comment_text, new_comment.Parent_Comment_ID).
 		Scan(&comment_id)
 	
 	if err != nil {
 		return 0, fmt.Errorf("error inserting eco comment %v", err)
 	}
 
+	fmt.Printf("Eco comment created - ID: %d, EcoID: %d, ParentCommentID: %v\n", comment_id, new_comment.Parent_Eco_id, new_comment.Parent_Comment_ID)
 	return comment_id, nil
 }
 
@@ -112,11 +113,13 @@ func (r *PostgresCommentRepo) GetEcoComments(eco_id int64, limit, offset int) ([
 			c.comment_text,
 			c.created_at,
 			u.user_handle,
-			u.user_profile_name
+			u.user_profile_name,
+			c.comment_id,
+			c.parent_comment_id
 		FROM eco_comments_table c
 		JOIN user_data_table u ON c.commenter_id = u.user_id
 		WHERE c.parent_eco_id = $1
-		ORDER BY c.created_at
+		ORDER BY c.parent_comment_id NULLS FIRST, c.created_at
 		LIMIT $2 OFFSET $3;
 	`
 
@@ -129,7 +132,7 @@ func (r *PostgresCommentRepo) GetEcoComments(eco_id int64, limit, offset int) ([
 	var comments []models.EcoCommentData
 	for rows.Next() {
 		var comment models.EcoCommentData
-		err := rows.Scan(&comment.Commenter_id, &comment.Comment_text, &comment.Comment_date, &comment.Commenter_Handle, &comment.Commenter_Name)
+		err := rows.Scan(&comment.Commenter_id, &comment.Comment_text, &comment.Comment_date, &comment.Commenter_Handle, &comment.Commenter_Name, &comment.Comment_id, &comment.Parent_Comment_ID)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning eco comment: %v", err)
 		}

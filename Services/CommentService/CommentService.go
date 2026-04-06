@@ -169,12 +169,35 @@ func pushEcoComment(w http.ResponseWriter, r *http.Request, CommentRepo reposito
 		log.Println("error in string to int conversion ", parent_eco_id)
 		return err
 	}
+
+	var parentCommentID sql.NullInt64
+
+	parentCommentStr := r.FormValue("parentCommentID")
+
+	if parentCommentStr != "" {
+		val, err := strconv.ParseInt(parentCommentStr, 10, 64)
+		if err != nil {
+			http.Error(w, "Invalid parent comment ID", http.StatusBadRequest)
+			log.Println("string to int conversion error:", err)
+			return err
+		}
+		parentCommentID = sql.NullInt64{
+			Int64: val,
+			Valid: true,
+		}
+	} else {
+		parentCommentID = sql.NullInt64{Valid: false}
+	}
+
 	comment_text := r.FormValue("commentText")
+
+	log.Printf("Creating eco comment - EcoID: %d, ParentCommentID: %v, CommenterID: %d", parent_eco_id, parentCommentID, commmenter_id)
 
 	new_comment := &models.EcoCommentData{
 		Commenter_id: commmenter_id,
 		Parent_Eco_id: parent_eco_id,
 		Comment_text: comment_text,
+		Parent_Comment_ID: parentCommentID,
 	}
 
 	cmnt_ID, err :=CommentRepo.CreateNewEcoComment(new_comment)

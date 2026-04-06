@@ -97,15 +97,70 @@ curl -X POST http://localhost:8080/upload \
 Push Comment on a Video
 
 curl -X POST http://localhost:7200/push-comment \
--d "parentVideoID=1" \ 
+-d "parentVideoID=1" \
 -d "commentText=jai ma bhavani" \
--H "Authorization: <auth token>" \
+-d "parentCommentID=5" \
+-H "Authorization: <auth token>"
+
+Required: parentVideoID, commentText, Authorization header
+Optional: parentCommentID (for replies to existing comments, omit for top-level comments)
+
+Response: "Commented"
 
 
 Get Comment on a Video
 
 curl -X GET "http://localhost:7200/get-comment?videoID=46&limit=10&offset=20"
 
+
+
+Push Comment on an Eco
+
+curl -X POST http://localhost:7200/push-eco-comment \
+-d "parentEcoID=1" \
+-d "commentText=hari bol" \
+-d "parentCommentID=3" \
+-H "Authorization: <auth token>"
+
+Required: parentEcoID, commentText, Authorization header
+Optional: parentCommentID (for replies to existing comments, omit for top-level comments)
+
+Response: "Eco Commented"
+
+
+Get Comments on an Eco
+
+curl -X GET "http://localhost:7200/get-eco-comment?ecoID=1&limit=10&offset=0"
+response
+{
+  "comments": [
+    {
+      "Comment_id": 1,
+      "Commenter_id": 27,
+      "Parent_Eco_id": 0,
+      "Comment_text": "hari bol",
+      "Comment_date": "2025-01-23T10:00:00Z",
+      "Commenter_Handle": "krishna_ji",
+      "Commenter_Name": "Govinda",
+      "Parent_Comment_ID": null
+    },
+    {
+      "Comment_id": 3,
+      "Commenter_id": 99,
+      "Parent_Eco_id": 0,
+      "Comment_text": "radhe radhe",
+      "Comment_date": "2025-01-23T10:05:00Z",
+      "Commenter_Handle": "hero",
+      "Commenter_Name": "Surya",
+      "Parent_Comment_ID": 1
+    }
+  ],
+  "pagination": {
+    "limit": 10,
+    "offset": 0,
+    "total": 2
+  }
+}
 
 
 

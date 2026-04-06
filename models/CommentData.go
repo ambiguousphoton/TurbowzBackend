@@ -21,4 +21,5 @@ type EcoCommentData struct {
 	Comment_date string
 	Commenter_Handle string
 	Commenter_Name string
+	Parent_Comment_ID sql.NullInt64
 }
