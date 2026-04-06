@@ -27,18 +27,32 @@ func NewPostgresCommentRepo(db *sql.DB) CommentRepo {
 
 
 func (r *PostgresCommentRepo) CreateNewComment(new_comment *models.CommentData) (int64, error) {
-	query := `
+	tx, err := r.db.Begin()
+	if err != nil {
+		return 0, fmt.Errorf("error starting transaction %v", err)
+	}
+	defer tx.Rollback()
+
+	var comment_id int64
+	err = tx.QueryRow(`
 		INSERT INTO comments_table (parent_video_id, commenter_id, comment_text, parent_comment_id)
 		VALUES ($1, $2, $3, $4)
 		RETURNING comment_id;
-	`
-
-	var comment_id int64
-	err := r.db.QueryRow(query, new_comment.Parent_video_id, new_comment.Commenter_id, new_comment.Comment_text, new_comment.Parent_Comment_ID).
+	`, new_comment.Parent_video_id, new_comment.Commenter_id, new_comment.Comment_text, new_comment.Parent_Comment_ID).
 		Scan(&comment_id)
-	
 	if err != nil {
 		return 0, fmt.Errorf("error Inserting the Comment %v", err)
+	}
+
+	if new_comment.Parent_Comment_ID.Valid {
+		_, err = tx.Exec(`UPDATE comments_table SET replies_count = replies_count + 1 WHERE comment_id = $1`, new_comment.Parent_Comment_ID.Int64)
+		if err != nil {
+			return 0, fmt.Errorf("error updating replies_count %v", err)
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return 0, fmt.Errorf("error committing transaction %v", err)
 	}
 
 	fmt.Printf("Comment created - ID: %d, VideoID: %d, ParentCommentID: %v\n", comment_id, new_comment.Parent_video_id, new_comment.Parent_Comment_ID)
@@ -88,18 +102,32 @@ func (r *PostgresCommentRepo) GetVideoComments(video_id int64, limit, offset int
 }
 
 func (r *PostgresCommentRepo) CreateNewEcoComment(new_comment *models.EcoCommentData) (int64, error) {
-	query := `
+	tx, err := r.db.Begin()
+	if err != nil {
+		return 0, fmt.Errorf("error starting transaction %v", err)
+	}
+	defer tx.Rollback()
+
+	var comment_id int64
+	err = tx.QueryRow(`
 		INSERT INTO eco_comments_table (parent_eco_id, commenter_id, comment_text, parent_comment_id)
 		VALUES ($1, $2, $3, $4)
 		RETURNING comment_id;
-	`
-
-	var comment_id int64
-	err := r.db.QueryRow(query, new_comment.Parent_Eco_id, new_comment.Commenter_id, new_comment.Comment_text, new_comment.Parent_Comment_ID).
+	`, new_comment.Parent_Eco_id, new_comment.Commenter_id, new_comment.Comment_text, new_comment.Parent_Comment_ID).
 		Scan(&comment_id)
-	
 	if err != nil {
 		return 0, fmt.Errorf("error inserting eco comment %v", err)
+	}
+
+	if new_comment.Parent_Comment_ID.Valid {
+		_, err = tx.Exec(`UPDATE eco_comments_table SET replies_count = replies_count + 1 WHERE comment_id = $1`, new_comment.Parent_Comment_ID.Int64)
+		if err != nil {
+			return 0, fmt.Errorf("error updating replies_count %v", err)
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return 0, fmt.Errorf("error committing transaction %v", err)
 	}
 
 	fmt.Printf("Eco comment created - ID: %d, EcoID: %d, ParentCommentID: %v\n", comment_id, new_comment.Parent_Eco_id, new_comment.Parent_Comment_ID)
