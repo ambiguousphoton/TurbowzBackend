@@ -10,6 +10,7 @@ type CommentData struct {
 	Commenter_Handle string
 	Commenter_Name string
 	Parent_Comment_ID sql.NullInt64
+	Replies_Count int64
 }
 
 
@@ -22,4 +23,5 @@ type EcoCommentData struct {
 	Commenter_Handle string
 	Commenter_Name string
 	Parent_Comment_ID sql.NullInt64
+	Replies_Count int64
 }

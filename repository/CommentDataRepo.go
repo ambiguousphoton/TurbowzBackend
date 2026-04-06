@@ -71,7 +71,8 @@ func (r *PostgresCommentRepo) GetVideoComments(video_id int64, limit, offset int
 			u.user_handle,
 			u.user_profile_name,
 			c.comment_id,
-			c.parent_comment_id
+			c.parent_comment_id,
+			c.replies_count
 		FROM comments_table c
 		JOIN user_data_table u ON c.commenter_id = u.user_id
 		WHERE c.parent_video_id = $1 AND c.parent_comment_id IS NULL
@@ -89,7 +90,7 @@ func (r *PostgresCommentRepo) GetVideoComments(video_id int64, limit, offset int
 	var comments []models.CommentData
 	for rows.Next() {
 		var comment models.CommentData
-		err := rows.Scan(&comment.Commenter_id, &comment.Comment_text, &comment.Comment_date, &comment.Commenter_Handle, &comment.Commenter_Name, &comment.Comment_id, &comment.Parent_Comment_ID)
+		err := rows.Scan(&comment.Commenter_id, &comment.Comment_text, &comment.Comment_date, &comment.Commenter_Handle, &comment.Commenter_Name, &comment.Comment_id, &comment.Parent_Comment_ID, &comment.Replies_Count)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning comment: %v", err)
 		}
@@ -145,7 +146,8 @@ func (r *PostgresCommentRepo) GetEcoComments(eco_id int64, limit, offset int) ([
 			u.user_handle,
 			u.user_profile_name,
 			c.comment_id,
-			c.parent_comment_id
+			c.parent_comment_id,
+			c.replies_count
 		FROM eco_comments_table c
 		JOIN user_data_table u ON c.commenter_id = u.user_id
 		WHERE c.parent_eco_id = $1 AND c.parent_comment_id IS NULL
@@ -162,7 +164,7 @@ func (r *PostgresCommentRepo) GetEcoComments(eco_id int64, limit, offset int) ([
 	var comments []models.EcoCommentData
 	for rows.Next() {
 		var comment models.EcoCommentData
-		err := rows.Scan(&comment.Commenter_id, &comment.Comment_text, &comment.Comment_date, &comment.Commenter_Handle, &comment.Commenter_Name, &comment.Comment_id, &comment.Parent_Comment_ID)
+		err := rows.Scan(&comment.Commenter_id, &comment.Comment_text, &comment.Comment_date, &comment.Commenter_Handle, &comment.Commenter_Name, &comment.Comment_id, &comment.Parent_Comment_ID, &comment.Replies_Count)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning eco comment: %v", err)
 		}
@@ -199,7 +201,8 @@ func (r *PostgresCommentRepo) GetVideoCommentReplies(parent_comment_id int64, li
 			u.user_handle,
 			u.user_profile_name,
 			c.comment_id,
-			c.parent_comment_id
+			c.parent_comment_id,
+			c.replies_count
 		FROM comments_table c
 		JOIN user_data_table u ON c.commenter_id = u.user_id
 		WHERE c.parent_comment_id = $1
@@ -215,7 +218,7 @@ func (r *PostgresCommentRepo) GetVideoCommentReplies(parent_comment_id int64, li
 	var comments []models.CommentData
 	for rows.Next() {
 		var comment models.CommentData
-		err := rows.Scan(&comment.Commenter_id, &comment.Comment_text, &comment.Comment_date, &comment.Commenter_Handle, &comment.Commenter_Name, &comment.Comment_id, &comment.Parent_Comment_ID)
+		err := rows.Scan(&comment.Commenter_id, &comment.Comment_text, &comment.Comment_date, &comment.Commenter_Handle, &comment.Commenter_Name, &comment.Comment_id, &comment.Parent_Comment_ID, &comment.Replies_Count)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning video comment reply: %v", err)
 		}
@@ -233,7 +236,8 @@ func (r *PostgresCommentRepo) GetEcoCommentReplies(parent_comment_id int64, limi
 			u.user_handle,
 			u.user_profile_name,
 			c.comment_id,
-			c.parent_comment_id
+			c.parent_comment_id,
+			c.replies_count
 		FROM eco_comments_table c
 		JOIN user_data_table u ON c.commenter_id = u.user_id
 		WHERE c.parent_comment_id = $1
@@ -249,7 +253,7 @@ func (r *PostgresCommentRepo) GetEcoCommentReplies(parent_comment_id int64, limi
 	var comments []models.EcoCommentData
 	for rows.Next() {
 		var comment models.EcoCommentData
-		err := rows.Scan(&comment.Commenter_id, &comment.Comment_text, &comment.Comment_date, &comment.Commenter_Handle, &comment.Commenter_Name, &comment.Comment_id, &comment.Parent_Comment_ID)
+		err := rows.Scan(&comment.Commenter_id, &comment.Comment_text, &comment.Comment_date, &comment.Commenter_Handle, &comment.Commenter_Name, &comment.Comment_id, &comment.Parent_Comment_ID, &comment.Replies_Count)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning eco comment reply: %v", err)
 		}
