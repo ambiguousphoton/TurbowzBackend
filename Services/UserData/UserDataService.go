@@ -563,6 +563,92 @@ func confirmEmail(w http.ResponseWriter, r *http.Request, ev *authenticator.Emai
 	json.NewEncoder(w).Encode(map[string]string{"message": "email verified"})
 }
 
+func forgotPassword(w http.ResponseWriter, r *http.Request, UserRepo repository.UserRepo, ev *authenticator.EmailVerifier) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form data", http.StatusBadRequest)
+		return
+	}
+
+	email := r.FormValue("email")
+	if err := authenticator.ValidateEmail(email); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	exists, err := UserRepo.CheckEmailExists(email)
+	if err != nil {
+		log.Printf("forgotPassword: db error - %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	if !exists {
+		log.Printf("forgotPassword: email not found - %s", email)
+		http.Error(w, "email not registered", http.StatusNotFound)
+		return
+	}
+
+	if err := ev.GenerateAndSend(email); err != nil {
+		log.Printf("forgotPassword: failed to send OTP to %s - %v", email, err)
+		http.Error(w, "failed to send verification email", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "password reset code sent"})
+}
+
+func resetPassword(w http.ResponseWriter, r *http.Request, UserRepo repository.UserRepo, ev *authenticator.EmailVerifier) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form data", http.StatusBadRequest)
+		return
+	}
+
+	email := r.FormValue("email")
+	code := r.FormValue("otp")
+	newPassword := r.FormValue("new_password")
+
+	if email == "" || code == "" || newPassword == "" {
+		http.Error(w, "email, otp, and new_password are required", http.StatusBadRequest)
+		return
+	}
+
+	if err := authenticator.ValidatePassword(newPassword); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if !ev.Verify(email, code) {
+		log.Printf("resetPassword: invalid or expired OTP for %s", email)
+		http.Error(w, "invalid or expired verification code", http.StatusUnauthorized)
+		return
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		log.Printf("resetPassword: failed to hash password - %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if err := UserRepo.UpdatePassword(email, string(hashedPassword)); err != nil {
+		log.Printf("resetPassword: failed to update password for %s - %v", email, err)
+		http.Error(w, "failed to reset password", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("resetPassword: password reset successful for %s", email)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "password reset successful"})
+}
+
 func withCORS(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -603,6 +689,14 @@ func main() {
 
 	mux.HandleFunc("/confirm-email", func(w http.ResponseWriter, r *http.Request) {
 		confirmEmail(w, r, emailVerifier)
+	})
+
+	mux.HandleFunc("/forgot-password", func(w http.ResponseWriter, r *http.Request) {
+		forgotPassword(w, r, UserRepo, emailVerifier)
+	})
+
+	mux.HandleFunc("/reset-password", func(w http.ResponseWriter, r *http.Request) {
+		resetPassword(w, r, UserRepo, emailVerifier)
 	})
 
 	mux.HandleFunc("/create-new-account", func(w http.ResponseWriter, r *http.Request) {

@@ -16,6 +16,7 @@ type UserRepo interface {
     AddUserAuth(auth *models.UserAuth) error
 	CheckUser(userHandle string) (int64, string, error)
 	CheckEmailExists(email string) (bool, error)
+	UpdatePassword(email string, hashedPassword string) error
 	FollowUser(FollowerID int64, FolloweeID int64) (error)
 	UnfollowUser(FollowerID int64, FolloweeID int64) (error)
 	GetAllFollowers(FolloweeID int64) ([]int64,error)
@@ -226,6 +227,17 @@ func (r *PostgresUserRepo) CheckEmailExists(email string) (bool, error) {
 		return false, fmt.Errorf("failed to check email existence: %w", err)
 	}
 	return exists, nil
+}
+
+func (r *PostgresUserRepo) UpdatePassword(email string, hashedPassword string) error {
+	_, err := r.db.Exec(
+		`UPDATE user_authentication SET user_hashed_password = $1 WHERE user_login_account = $2`,
+		hashedPassword, email,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update password: %w", err)
+	}
+	return nil
 }
 
 
