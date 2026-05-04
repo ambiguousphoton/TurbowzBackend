@@ -531,3 +531,33 @@ Get Echo Score
 curl -X GET "http://localhost:7011/get-echo-score?echo_id=5"
 
     Response : {"Echo_Quality":{"Float64":4,"Valid":true},"Echo_AI_Usage":{"Float64":2,"Valid":true},"Total_Qualtiy_Votes":1,"Total_Ai_Votes":1}
+
+
+Forgot Password Flow
+Step 1: Request reset OTP
+
+curl -X POST http://localhost:8100/forgot-password \
+  -d "email=user@example.com"
+
+Copy
+bash
+200 → {"message": "password reset code sent"}
+
+404 → email not registered
+
+400 → invalid email format
+
+Step 2: Reset with OTP + new password
+
+curl -X POST http://localhost:8100/reset-password \
+  -d "email=user@example.com" \
+  -d "otp=482917" \
+  -d "new_password=NewPass123"
+
+Copy
+bash
+200 → {"message": "password reset successful"}
+
+401 → invalid/expired OTP
+
+400 → password doesn't meet requirements (8+ chars, upper+lower+digit)

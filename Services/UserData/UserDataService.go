@@ -218,8 +218,8 @@ func UserAuthentication(w http.ResponseWriter, r *http.Request, UserRepo reposit
 	} 
 	if bcrypt.CompareHashAndPassword([]byte(PasswordFrmDB), []byte(inputPassword)) != nil{
 		log.Printf("UserAuthentication: Password mismatch for user %s (ID: %d)", UserHandle, userId)
-		http.Error(w, "Failed to Authenticate User, Wrong Password", http.StatusInternalServerError)
-		return err
+		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+		return fmt.Errorf("password mismatch")
 	}
 
 		// Create JWT
