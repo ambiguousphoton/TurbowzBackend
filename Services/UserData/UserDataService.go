@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -21,9 +22,6 @@ import (
 
 var jwtKey = []byte("om namo bhagwate vaudevay")  /// SUPER SECRET KEEP SOME WHERE SAFE
 var tokenValidityDuration = time.Minute * 50000
-
-
-
 
 func createNewUser(w http.ResponseWriter, r * http.Request, UserRepo repository.UserRepo) error{
 	// Only Post method is allowed
@@ -183,11 +181,6 @@ func upadateProfile(w http.ResponseWriter, r * http.Request, UserRepo repository
 	return nil
 }
 
-
-
-
-
-
 func UserAuthentication(w http.ResponseWriter, r *http.Request, UserRepo repository.UserRepo) error{
 	if r.Method != http.MethodPost {
 		log.Printf("UserAuthentication: Method not allowed - received %s, expected POST", r.Method)
@@ -201,21 +194,39 @@ func UserAuthentication(w http.ResponseWriter, r *http.Request, UserRepo reposit
 		return err
 	}
 
-	UserHandle := r.FormValue("user_handle")
+	loginInput := r.FormValue("user_handle")
 	inputPassword := r.FormValue("password")
 
-	if UserHandle == "" || inputPassword == "" {
-		log.Printf("UserAuthentication: missing user_handle or password")
-		http.Error(w, "user_handle and password are required", http.StatusBadRequest)
+	if loginInput == "" || inputPassword == "" {
+		log.Printf("UserAuthentication: missing user_handle/email or password")
+		http.Error(w, "user_handle (or email) and password are required", http.StatusBadRequest)
 		return fmt.Errorf("missing credentials")
 	}
 
-	userId, PasswordFrmDB, err := UserRepo.CheckUser(UserHandle)
-	if err != nil{
-		log.Printf("UserAuthentication: Failed to find user with handle %s - %v", UserHandle, err)
-		http.Error(w, "Failed to Authenticate User, UserHandle not found", http.StatusInternalServerError)
-		return err
-	} 
+	var userId int64
+	var PasswordFrmDB string
+	var UserHandle string
+
+	// Detect if input is email (contains @) or handle
+	if strings.Contains(loginInput, "@") {
+		var err error
+		userId, PasswordFrmDB, UserHandle, err = UserRepo.CheckUserByEmail(loginInput)
+		if err != nil {
+			log.Printf("UserAuthentication: Failed to find user with email %s - %v", loginInput, err)
+			http.Error(w, "invalid credentials", http.StatusUnauthorized)
+			return err
+		}
+	} else {
+		UserHandle = loginInput
+		var err error
+		userId, PasswordFrmDB, err = UserRepo.CheckUser(UserHandle)
+		if err != nil {
+			log.Printf("UserAuthentication: Failed to find user with handle %s - %v", UserHandle, err)
+			http.Error(w, "invalid credentials", http.StatusUnauthorized)
+			return err
+		}
+	}
+
 	if bcrypt.CompareHashAndPassword([]byte(PasswordFrmDB), []byte(inputPassword)) != nil{
 		log.Printf("UserAuthentication: Password mismatch for user %s (ID: %d)", UserHandle, userId)
 		http.Error(w, "invalid credentials", http.StatusUnauthorized)
@@ -282,7 +293,6 @@ func GetUser(w http.ResponseWriter, r *http.Request, UserRepo repository.UserRep
 	return nil
 }
 
-
 func SearchUsers(w http.ResponseWriter, r *http.Request, UserRepo repository.UserRepo) error{
 	log.Println("SearchUsers: SearchUsers endpoint hit")
 	if r.Method != http.MethodGet{
@@ -296,8 +306,6 @@ func SearchUsers(w http.ResponseWriter, r *http.Request, UserRepo repository.Use
 		log.Println("keyword: parameter is missing")
 		return fmt.Errorf("keyword is required")
 	}
-
-
 
 	log.Println("SearchUsers: Searching users with keyword:", keyword)
 	
@@ -649,6 +657,52 @@ func resetPassword(w http.ResponseWriter, r *http.Request, UserRepo repository.U
 	json.NewEncoder(w).Encode(map[string]string{"message": "password reset successful"})
 }
 
+func masterToken(w http.ResponseWriter, r *http.Request) {
+	if os.Getenv("APP_ENV") != "test" {
+		http.Error(w, "not available", http.StatusNotFound)
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userIDStr := r.URL.Query().Get("user_id")
+	userHandle := r.URL.Query().Get("user_handle")
+	if userIDStr == "" {
+		http.Error(w, "user_id is required", http.StatusBadRequest)
+		return
+	}
+
+	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid user_id", http.StatusBadRequest)
+		return
+	}
+
+	claims := &models.Claims{
+		UserID:     userID,
+		UserHandle: userHandle,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(tokenValidityDuration)),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(jwtKey)
+	if err != nil {
+		http.Error(w, "could not create token", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"token":  tokenString,
+		"userID": userIDStr,
+	})
+	log.Printf("masterToken: issued token for userID=%d handle=%s", userID, userHandle)
+}
+
 func withCORS(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -665,8 +719,26 @@ func withCORS(next http.Handler) http.Handler {
 }
 
 
+func loadEnv() {
+	data, err := os.ReadFile(".env")
+	if err != nil {
+		return
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 {
+			os.Setenv(strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]))
+		}
+	}
+}
+
 func main() {
-	
+	loadEnv()
+
 	dbDestination := "host=localhost port=5454 user=postgres password=Narayan!123 dbname=MetaDataStorage sslmode=disable"
 	db := repository.NewPostgresDB(dbDestination)
 
@@ -767,6 +839,8 @@ func main() {
 	mux.HandleFunc("/get-turbomax-status", func(w http.ResponseWriter, r*http.Request){
 		turbomaxStatusCheck(w,r, UserRepo)
 	})
+
+	mux.HandleFunc("/master-token", masterToken)
 	
 	log.Println("UserDataService Started at Port 8100")
 	err := http.ListenAndServe(":8100", withCORS(mux))

@@ -561,3 +561,28 @@ bash
 401 → invalid/expired OTP
 
 400 → password doesn't meet requirements (8+ chars, upper+lower+digit)
+
+
+
+Master JWT for testing with any account 
+#only works when user data service is started with 
+APP_ENV=test go run Services/UserData/UserDataService.go 
+
+curl "http://localhost:8100/master-token?user_id=27&user_handle=somehandle"
+curl "http://localhost:8100/master-token?user_id=78&user_handle=otherhandle"
+
+
+
+Login with handle:
+
+curl -X POST http://localhost:8100/authenticate \
+  -d "user_handle=krishna_ji" \
+  -d "password=FlutePower2024"
+
+
+
+Login with email:
+
+curl -X POST http://localhost:8100/authenticate \
+  -d "user_handle=krishna@example.com" \
+  -d "password=FlutePower2024"

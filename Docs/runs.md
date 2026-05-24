@@ -30,6 +30,10 @@ go run Services/EventService/EventService.go                (7002)
 
 
 
+for testing and master jwt 
+# APP_ENV=test go run Services/UserData/UserDataService.go
+
+
 
 
 Task Executer

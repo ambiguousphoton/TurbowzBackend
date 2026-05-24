@@ -15,6 +15,7 @@ type UserRepo interface {
 	UpadateUserProfile(user *models.UserData) error
     AddUserAuth(auth *models.UserAuth) error
 	CheckUser(userHandle string) (int64, string, error)
+	CheckUserByEmail(email string) (int64, string, string, error)
 	CheckEmailExists(email string) (bool, error)
 	UpdatePassword(email string, hashedPassword string) error
 	FollowUser(FollowerID int64, FolloweeID int64) (error)
@@ -215,6 +216,31 @@ func (r *PostgresUserRepo) CheckUser(userHandle string) (int64, string, error){
 	}
 
 	return userID, passwordHash, nil
+}
+
+func (r *PostgresUserRepo) CheckUserByEmail(email string) (int64, string, string, error) {
+	var userID int64
+	var passwordHash string
+	var userHandle string
+	err := r.db.QueryRow(
+		`
+		SELECT 
+			d.user_id,
+			a.user_hashed_password,
+			d.user_handle
+		FROM 
+			user_data_table d
+		JOIN 
+			user_authentication a 
+		ON 
+			d.user_id = a.user_id
+		WHERE 
+			a.user_login_account = $1;
+		`, email).Scan(&userID, &passwordHash, &userHandle)
+	if err != nil {
+		return 0, "", "", fmt.Errorf("failed to get user by email: %v", err)
+	}
+	return userID, passwordHash, userHandle, nil
 }
 
 func (r *PostgresUserRepo) CheckEmailExists(email string) (bool, error) {
