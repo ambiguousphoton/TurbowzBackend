@@ -5,6 +5,7 @@ import (
 	"GoServer/models"
 	"context"
 	"log"
+	"time"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -29,6 +30,7 @@ func RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 
 			if err != nil || !token.Valid {
 				log.Printf("RequireAuth: invalid or expired token - %v", err)
+				log.Printf("Token exp: %v, Server now: %v", claims.ExpiresAt.Time, time.Now())
 				http.Error(w, "invalid token", http.StatusUnauthorized)
 				return
 			}
