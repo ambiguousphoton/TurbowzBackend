@@ -3,15 +3,17 @@ package main
 import (
 	"GoServer/authenticator"
 	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
-	// "os/user"
+	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	// "golang.org/x/tools/go/analysis/passes/defers"
 )
 
 
@@ -37,11 +39,41 @@ var (
 
 
 func registerUser(userID string, conn *websocket.Conn){
-	UserMux.Lock();
-	UsersList[userID] = conn;
+	UserMux.Lock()
+	UsersList[userID] = conn
 	log.Printf("User %s registered, total users: %d", userID, len(UsersList))
-	UserMux.Unlock();
+	UserMux.Unlock()
+	broadcastPresence(userID, "online")
 	deliverPendingMessages(userID)
+}
+
+func unregisterUser(userID string) {
+	UserMux.Lock()
+	delete(UsersList, userID)
+	UserMux.Unlock()
+	broadcastPresence(userID, "offline")
+}
+
+func broadcastPresence(userID, status string) {
+	msg := map[string]string{
+		"type":   "presence",
+		"userID": userID,
+		"status": status,
+	}
+	UserMux.Lock()
+	defer UserMux.Unlock()
+	for uid, conn := range UsersList {
+		if uid != userID {
+			conn.WriteJSON(msg)
+		}
+	}
+}
+
+func isUserOnline(userID string) bool {
+	UserMux.Lock()
+	defer UserMux.Unlock()
+	_, exists := UsersList[userID]
+	return exists
 }
 
 
@@ -84,7 +116,7 @@ func MakeDuoRoom(user1ID, user2ID string) string {
 }
 
 
-func sendMessageToRoom(sourceID, roomID, messageText, links, messageID string) {
+func sendMessageToRoom(sourceID, roomID, messageText, links, messageID, mediaURL, mediaType string) {
 	RoomsMux.Lock()
 	members, roomExists := RoomsList[roomID]
 	RoomsMux.Unlock()
@@ -104,6 +136,8 @@ func sendMessageToRoom(sourceID, roomID, messageText, links, messageID string) {
             "messageText":   messageText,
             "roomID":        roomID,
             "links":         links,
+            "mediaURL":      mediaURL,
+            "mediaType":     mediaType,
         }
 	for userID := range members {
 		if userID != sourceID {
@@ -124,7 +158,7 @@ func sendMessageToRoom(sourceID, roomID, messageText, links, messageID string) {
 			}
 		}
 	}
-	log.Printf("Message sent to %d users in room %s with messageID", sentCount, roomID, messageID)
+	log.Printf("Message sent to %d users in room %s with messageID %s", sentCount, roomID, messageID)
 }
 
 
@@ -137,6 +171,8 @@ func handleNewMessage(message map[string]string){
 	roomID        := message["roomID"]
 	messageText   := message["messageText"]
 	links         := message["links"]
+	mediaURL      := message["mediaURL"]
+	mediaType     := message["mediaType"] // "image", "video", "gif"
 
 	log.Printf("Handling message from %s to %s in room %s", sourceID, destinationID, roomID)
 	if destinationID != "" {
@@ -144,12 +180,32 @@ func handleNewMessage(message map[string]string){
 		log.Printf("Created new duo room %s for users %s and %s", roomID, sourceID, destinationID)
 	}
 	
-	sendMessageToRoom(sourceID, roomID, messageText, links, messageID)
+	sendMessageToRoom(sourceID, roomID, messageText, links, messageID, mediaURL, mediaType)
 	printQueue()
 }
 
 
  
+func handleReadReceipt(message map[string]string) {
+	readerID := message["sourceID"]
+	messageID := message["messageID"]
+	senderID := message["senderID"]
+
+	receipt := map[string]string{
+		"type":      "read_receipt",
+		"messageID": messageID,
+		"readerID":  readerID,
+	}
+
+	UserMux.Lock()
+	conn, online := UsersList[senderID]
+	UserMux.Unlock()
+
+	if online {
+		conn.WriteJSON(receipt)
+	}
+}
+
 func websocketHandler(w http.ResponseWriter, r *http.Request) {
 	connecterID, ok := r.Context().Value("userID").(int64)
 	if !ok  {
@@ -184,8 +240,16 @@ func websocketHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		
 		message["sourceID"] = connecterIDstr
-		handleNewMessage(message)
+
+		switch message["type"] {
+		case "read_receipt":
+			handleReadReceipt(message)
+		default:
+			handleNewMessage(message)
+		}
 	}
+
+	unregisterUser(connecterIDstr)
 }
 
 
@@ -249,8 +313,65 @@ func deliverPendingMessages(userID string) {
     log.Printf("Finished delivering pending messages to %s", userID)
 }
 
+func onlineStatusHandler(w http.ResponseWriter, r *http.Request) {
+	userID := r.URL.Query().Get("userID")
+	if userID == "" {
+		http.Error(w, "missing userID", http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"online": isUserOnline(userID)})
+}
+
+const mediaDir = "MediaData/chat_media"
+
+func chatMediaUploadHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	r.ParseMultipartForm(50 << 20) // 50MB max
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, "missing file", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	ext := filepath.Ext(header.Filename)
+	fileID := uuid.New().String() + ext
+
+	os.MkdirAll(mediaDir, 0755)
+	dst, err := os.Create(filepath.Join(mediaDir, fileID))
+	if err != nil {
+		http.Error(w, "failed to save file", http.StatusInternalServerError)
+		return
+	}
+	defer dst.Close()
+	io.Copy(dst, file)
+
+	mediaURL := fmt.Sprintf("/chat-media?id=%s", fileID)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"mediaURL": mediaURL})
+}
+
+func chatMediaServeHandler(w http.ResponseWriter, r *http.Request) {
+	fileID := r.URL.Query().Get("id")
+	if fileID == "" {
+		http.Error(w, "missing id", http.StatusBadRequest)
+		return
+	}
+	filePath := filepath.Join(mediaDir, filepath.Base(fileID))
+	http.ServeFile(w, r, filePath)
+}
+
 func main(){
-	http.HandleFunc("/connect-with-socket-server", authenticator.RequireAuth(websocketHandler));
+	http.HandleFunc("/connect-with-socket-server", authenticator.RequireAuth(websocketHandler))
+	http.HandleFunc("/online-status", onlineStatusHandler)
+	http.HandleFunc("/upload-chat-media", authenticator.RequireAuth(chatMediaUploadHandler))
+	http.HandleFunc("/chat-media", chatMediaServeHandler)
 	log.Println("Starting CommunicationService on Port 8280")
 	err := http.ListenAndServe(":8280", nil)
 	log.Println(err)

@@ -586,3 +586,60 @@ Login with email:
 curl -X POST http://localhost:8100/authenticate \
   -d "user_handle=krishna@example.com" \
   -d "password=FlutePower2024"
+
+
+Online Status Check
+
+curl -X GET "http://localhost:8280/online-status?userID=27"
+
+Response: {"online":true}
+
+
+Upload Chat Media (photos, videos, GIFs)
+
+curl -X POST http://localhost:8280/upload-chat-media \
+  -H "Authorization: <auth token>" \
+  -F "file=@photo.jpg"
+
+Response: {"mediaURL":"/chat-media?id=<uuid>.jpg"}
+Max file size: 50MB
+
+
+Get Chat Media
+
+curl -X GET "http://localhost:8280/chat-media?id=<uuid>.jpg" --output media.jpg
+
+
+Websocket - Send Media Message
+
+ws://localhost:8280/connect-with-socket-server
+Authorization : token
+{
+  "destinationID": "27",
+  "messageText": "Check this out!",
+  "mediaURL": "/chat-media?id=abc123.jpg",
+  "mediaType": "image",
+  "links": ""
+}
+
+mediaType options: "image", "video", "gif"
+
+
+Websocket - Read Receipt
+
+Send to server when you read a message:
+{
+  "type": "read_receipt",
+  "messageID": "32170fea-6ef4-4902-9226-58b17ba82be1",
+  "senderID": "7"
+}
+
+Sender receives:
+{"type":"read_receipt","messageID":"32170fea-...","readerID":"27"}
+
+
+Websocket - Presence Events (auto-received)
+
+When a user comes online/offline, all connected users receive:
+{"type":"presence","userID":"7","status":"online"}
+{"type":"presence","userID":"7","status":"offline"}
